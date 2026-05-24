@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { applyEditKey, formatOutput, readEscapeSequence } = require('../src/tui');
+const { applyEditKey, formatOutput, readEscapeSequence } = require('../src/terminal');
 
 test('formats single-line answers and multi-line blocks differently', () => {
   assert.deepEqual(formatOutput('ans = 4'), ['< ans = 4']);

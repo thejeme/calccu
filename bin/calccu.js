@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { Calculator } = require('../src/engine');
-const { applyEditKey, formatOutput, helpText, readEscapeSequence } = require('../src/tui');
+const { applyEditKey, formatOutput, helpText, readEscapeSequence } = require('../src/terminal');
 const pkg = require('../package.json');
 
 const calc = new Calculator();

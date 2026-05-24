@@ -1,7 +1,7 @@
 {
   "name": "calccu",
-  "version": "0.1.0",
-  "description": "A live CLI/TUI calculator with variables, functions, units, ans, and equation solving.",
+  "version": "0.1.1",
+  "description": "A live terminal calculator with variables, functions, units, ans, and equation solving.",
   "bin": {
     "calccu": "bin/calccu.js"
   },
@@ -12,7 +12,7 @@
   "keywords": [
     "calculator",
     "cli",
-    "tui",
+    "terminal",
     "math",
     "units"
   ],

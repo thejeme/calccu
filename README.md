@@ -27,7 +27,7 @@ npm start
 npm test
 ```
 
-You can also run one expression without opening the TUI:
+You can also run one expression without opening interactive mode:
 
 ```sh
 calccu "2 + 2"
