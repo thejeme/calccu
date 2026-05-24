@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { Calculator } = require('../src/engine');
+const { applyEditKey, formatOutput, helpText, readEscapeSequence } = require('../src/tui');
 
 const calc = new Calculator();
 const stdin = process.stdin;
@@ -8,47 +12,14 @@ const stdout = process.stdout;
 
 let input = '';
 let cursor = 0;
-let status = '';
 let running = true;
+let history = [];
+let commandHistory = [];
+let commandHistoryIndex = 0;
+let draftInput = '';
+const historyPath = process.env.CALCCU_HISTORY || path.join(os.homedir(), '.calccu_history');
 
-function helpText() {
-  return [
-    'calccu help',
-    '',
-    'Type expressions and see the result live. Press Enter to save the result as ans.',
-    '',
-    'Expressions:',
-    '  2 + 3 * 4',
-    '  2x + 1       implicit multiplication',
-    '  sin(pi / 2)',
-    '  ans * 10',
-    '',
-    'Variables:',
-    '  x = 12',
-    '  del x',
-    '  vars',
-    '',
-    'Functions:',
-    '  f(x) = x^2 + 1',
-    '  f(3)',
-    '  del f',
-    '  funcs',
-    '',
-    'Equations:',
-    '  2x = 3       -> x = 3/2',
-    '  3(x - 1) = 9 -> x = 4',
-    '',
-    'Commands:',
-    '  help, ?       show help',
-    '  clear         clear terminal',
-    '  quit, exit    quit',
-    '',
-    'Keys:',
-    '  Enter commit input',
-    '  Esc or Ctrl+C quit',
-    '  Ctrl+L clear terminal'
-  ].join('\n');
-}
+loadCommandHistory();
 
 function clearScreen() {
   stdout.write('\x1b[2J\x1b[H');
@@ -70,33 +41,52 @@ function previewFor(text) {
 
 function render() {
   const preview = previewFor(input);
+  let row = 1;
   clearScreen();
-  stdout.write('calccu  (? for help, Esc to quit)\n\n');
-  if (status) {
-    stdout.write(status + '\n\n');
+  stdout.write('calccu  (? for help, Ctrl+C to quit)\n\n');
+  row += 2;
+
+  for (const entry of visibleHistory()) {
+    stdout.write('> ' + entry.input + '\n');
+    row += 1;
+
+    const formatted = formatOutput(entry.output);
+    for (const line of formatted) stdout.write(line + '\n');
+    row += formatted.length;
+
+    stdout.write('\n');
+    row += 1;
   }
+
   stdout.write('> ' + input + '\n');
+  const promptRow = row;
+  row += 1;
+
   if (preview) {
-    stdout.write('= ' + preview + '\n');
+    const formatted = formatOutput(preview);
+    stdout.write(formatted.join('\n') + '\n');
   } else {
     stdout.write('\n');
   }
   stdout.write('\n');
 
-  const row = status ? 4 + status.split('\n').length : 3;
   const column = 3 + cursor;
-  stdout.write(`\x1b[${row};${column}H`);
+  stdout.write(`\x1b[${promptRow};${column}H`);
 }
 
 function commit() {
   const text = input.trim();
   input = '';
   cursor = 0;
+  commandHistoryIndex = commandHistory.length;
+  draftInput = '';
 
   if (!text) {
     render();
     return;
   }
+
+  rememberCommand(text);
 
   const command = text.toLowerCase();
   if (command === 'quit' || command === 'exit') {
@@ -104,38 +94,93 @@ function commit() {
     return;
   }
   if (command === 'clear' || command === 'cls') {
-    status = '';
+    history = [];
     render();
     return;
   }
   if (command === 'help' || command === '?') {
-    status = helpText();
+    rememberResult(text, helpText());
     render();
     return;
   }
 
   try {
-    status = calc.execute(text);
+    rememberResult(text, calc.execute(text));
   } catch (error) {
-    status = 'Error: ' + error.message;
+    rememberResult(text, 'Error: ' + error.message);
   }
   render();
 }
 
-function insert(text) {
-  input = input.slice(0, cursor) + text + input.slice(cursor);
-  cursor += text.length;
+function rememberCommand(text) {
+  if (commandHistory[commandHistory.length - 1] !== text) {
+    commandHistory.push(text);
+    if (commandHistory.length > 500) commandHistory = commandHistory.slice(-500);
+    saveCommandHistory();
+  }
+  commandHistoryIndex = commandHistory.length;
 }
 
-function removeBeforeCursor() {
-  if (cursor === 0) return;
-  input = input.slice(0, cursor - 1) + input.slice(cursor);
-  cursor -= 1;
+function rememberResult(text, output) {
+  history.push({ input: text, output });
+  if (history.length > 200) history = history.slice(-200);
 }
 
-function removeAtCursor() {
-  if (cursor >= input.length) return;
-  input = input.slice(0, cursor) + input.slice(cursor + 1);
+function visibleHistory() {
+  const rows = stdout.rows || 30;
+  const maxRows = Math.max(6, rows - 6);
+  let used = 0;
+  const visible = [];
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entryRows = 2 + entryLineCount(history[i].output);
+    if (visible.length > 0 && used + entryRows > maxRows) break;
+    visible.unshift(history[i]);
+    used += entryRows;
+  }
+
+  return visible;
+}
+
+function entryLineCount(output) {
+  return formatOutput(output).length;
+}
+
+function recallPrevious() {
+  if (commandHistory.length === 0) return;
+  if (commandHistoryIndex === commandHistory.length) draftInput = input;
+  commandHistoryIndex = Math.max(0, commandHistoryIndex - 1);
+  input = commandHistory[commandHistoryIndex];
+  cursor = input.length;
+}
+
+function recallNext() {
+  if (commandHistory.length === 0 || commandHistoryIndex === commandHistory.length) return;
+  commandHistoryIndex += 1;
+  input = commandHistoryIndex === commandHistory.length ? draftInput : commandHistory[commandHistoryIndex];
+  cursor = input.length;
+}
+
+function resetCommandRecall() {
+  commandHistoryIndex = commandHistory.length;
+  draftInput = '';
+}
+
+function loadCommandHistory() {
+  try {
+    commandHistory = fs.readFileSync(historyPath, 'utf8').split('\n').filter(Boolean).slice(-500);
+    commandHistoryIndex = commandHistory.length;
+  } catch (error) {
+    if (error.code !== 'ENOENT') return;
+  }
+}
+
+function saveCommandHistory() {
+  try {
+    fs.writeFileSync(historyPath, commandHistory.join('\n') + (commandHistory.length ? '\n' : ''), 'utf8');
+  } catch {
+    // History is a convenience feature; calculator use should not fail if the file cannot be written.
+  }
 }
 
 function shutdown() {
@@ -146,9 +191,21 @@ function shutdown() {
   stdin.pause();
 }
 
-function handleKey(data) {
-  const key = data.toString('utf8');
-  if (key === '\u0003' || key === '\u001b') {
+function handleData(data) {
+  const text = data.toString('utf8');
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '\u001b') {
+      const sequence = readEscapeSequence(text, i);
+      handleKey(sequence.value);
+      i = sequence.end;
+    } else {
+      handleKey(text[i]);
+    }
+  }
+}
+
+function handleKey(key) {
+  if (key === '\u0003') {
     shutdown();
     return;
   }
@@ -156,37 +213,35 @@ function handleKey(data) {
     shutdown();
     return;
   }
+  if (key === '\u001b') {
+    render();
+    return;
+  }
   if (key === '\r' || key === '\n') {
     commit();
     return;
   }
   if (key === '\u000c') {
-    status = '';
+    history = [];
     render();
     return;
   }
-  if (key === '\u007f' || key === '\b') {
-    removeBeforeCursor();
+  if (key === '\u001b[A') {
+    recallPrevious();
     render();
     return;
   }
-  if (key === '\u001b[D') {
-    cursor = Math.max(0, cursor - 1);
+  if (key === '\u001b[B') {
+    recallNext();
     render();
     return;
   }
-  if (key === '\u001b[C') {
-    cursor = Math.min(input.length, cursor + 1);
-    render();
-    return;
-  }
-  if (key === '\u001b[3~') {
-    removeAtCursor();
-    render();
-    return;
-  }
-  if (/^[\x20-\x7e]+$/.test(key)) {
-    insert(key);
+
+  const edit = applyEditKey({ input, cursor }, key);
+  if (edit.handled) {
+    input = edit.state.input;
+    cursor = edit.state.cursor;
+    if (edit.changed) resetCommandRecall();
     render();
   }
 }
@@ -195,12 +250,35 @@ process.on('exit', () => {
   if (stdin.isTTY) stdin.setRawMode(false);
 });
 
-if (!stdin.isTTY) {
-  console.error('calccu needs an interactive terminal.');
-  process.exit(1);
+if (process.argv.length > 2) {
+  const expression = process.argv.slice(2).join(' ');
+  try {
+    console.log(calc.execute(expression));
+    process.exit(0);
+  } catch (error) {
+    console.error('Error: ' + error.message);
+    process.exit(1);
+  }
 }
 
-stdin.setRawMode(true);
-stdin.resume();
-stdin.on('data', handleKey);
-render();
+if (!stdin.isTTY) {
+  const chunks = [];
+  stdin.setEncoding('utf8');
+  stdin.on('data', (chunk) => chunks.push(chunk));
+  stdin.on('end', () => {
+    const expressions = chunks.join('').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const expression of expressions) {
+      try {
+        console.log(calc.execute(expression));
+      } catch (error) {
+        console.error('Error: ' + error.message);
+        process.exitCode = 1;
+      }
+    }
+  });
+} else {
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.on('data', handleData);
+  render();
+}

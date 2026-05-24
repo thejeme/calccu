@@ -27,6 +27,14 @@ test('solves linear equations exactly', () => {
   assert.equal(calc.execute('2x = 3'), 'x = 3/2');
   assert.equal(calc.execute('3(x - 1) = 9'), 'x = 4');
   assert.equal(calc.execute('-0.5x = 1'), 'x = -2');
+  assert.equal(calc.execute('x/2 = 3'), 'x = 6');
+  assert.equal(calc.execute('1/3x = 2'), 'x = 6');
+});
+
+test('solves quadratic equations up to degree two', () => {
+  const calc = new Calculator();
+  assert.equal(calc.execute('x^2 - 4 = 0'), 'x = -2 or x = 2');
+  assert.equal(calc.execute('x^2 - 2 = 0'), 'x ~= -1.41421356237 or x ~= 1.41421356237');
 });
 
 test('deletes variables and functions', () => {
@@ -40,4 +48,19 @@ test('deletes variables and functions', () => {
 test('previews function definitions without evaluating the body', () => {
   const calc = new Calculator();
   assert.equal(calc.preview('g(x) = x + later'), 'save g(x)');
+});
+
+test('sets displayed precision', () => {
+  const calc = new Calculator();
+  assert.equal(calc.execute('precision 4'), 'precision = 4');
+  assert.equal(calc.execute('1/3'), 'ans = 0.3333');
+  assert.equal(calc.preview('precision'), 'precision = 4');
+});
+
+test('formats variables and functions as tables', () => {
+  const calc = new Calculator();
+  calc.execute('x = 2');
+  calc.execute('f(t) = t + 1');
+  assert.equal(calc.execute('vars'), 'Name  Value\nans   2\nx     2');
+  assert.equal(calc.execute('funcs'), 'Name  Parameters\nf     t');
 });

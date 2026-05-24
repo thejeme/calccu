@@ -133,6 +133,69 @@ class Linear {
   }
 }
 
+class Polynomial {
+  constructor(coeffs = []) {
+    this.coeffs = [
+      coeffs[0] || new Rational(0),
+      coeffs[1] || new Rational(0),
+      coeffs[2] || new Rational(0)
+    ];
+  }
+
+  add(other) {
+    return new Polynomial(this.coeffs.map((coef, index) => coef.add(other.coeffs[index])));
+  }
+
+  sub(other) {
+    return new Polynomial(this.coeffs.map((coef, index) => coef.sub(other.coeffs[index])));
+  }
+
+  neg() {
+    return new Polynomial(this.coeffs.map((coef) => coef.neg()));
+  }
+
+  mul(other) {
+    const result = [new Rational(0), new Rational(0), new Rational(0)];
+    for (let i = 0; i < this.coeffs.length; i += 1) {
+      for (let j = 0; j < other.coeffs.length; j += 1) {
+        if (this.coeffs[i].isZero() || other.coeffs[j].isZero()) continue;
+        if (i + j > 2) throw new CalcError('equation solving supports powers up to x^2');
+        result[i + j] = result[i + j].add(this.coeffs[i].mul(other.coeffs[j]));
+      }
+    }
+    return new Polynomial(result);
+  }
+
+  div(other) {
+    if (!other.coeffs[1].isZero() || !other.coeffs[2].isZero()) {
+      throw new CalcError('cannot divide by an expression containing the unknown');
+    }
+    return new Polynomial(this.coeffs.map((coef) => coef.div(other.coeffs[0])));
+  }
+
+  pow(other) {
+    if (!other.coeffs[1].isZero() || !other.coeffs[2].isZero()) {
+      throw new CalcError('variable exponents are not supported in equations');
+    }
+    const exponent = other.coeffs[0];
+    if (exponent.d !== 1 || exponent.n < 0) {
+      throw new CalcError('equation powers must be non-negative integers');
+    }
+    let result = new Polynomial([new Rational(1)]);
+    for (let i = 0; i < exponent.n; i += 1) {
+      result = result.mul(this);
+    }
+    return result;
+  }
+
+  degree() {
+    if (!this.coeffs[2].isZero()) return 2;
+    if (!this.coeffs[1].isZero()) return 1;
+    if (!this.coeffs[0].isZero()) return 0;
+    return -1;
+  }
+}
+
 class Tokenizer {
   constructor(input) {
     this.input = input;
@@ -280,22 +343,25 @@ class Parser {
 }
 
 class Calculator {
-  constructor() {
+  constructor(options = {}) {
     this.variables = new Map([['ans', 0]]);
     this.functions = new Map();
+    this.precision = options.precision || 12;
   }
 
   preview(input) {
     const parsed = this.parseStatement(input);
     switch (parsed.kind) {
       case 'expr':
-        return formatNumber(this.evaluate(parsed.expr));
+        return this.formatNumber(this.evaluate(parsed.expr));
       case 'equation':
         return this.solve(parsed.left, parsed.right);
       case 'assign':
-        return `${parsed.name} = ${formatNumber(this.evaluate(parsed.expr))}`;
+        return `${parsed.name} = ${this.formatNumber(this.evaluate(parsed.expr))}`;
       case 'fnAssign':
         return `save ${parsed.name}(${parsed.params.join(', ')})`;
+      case 'precision':
+        return parsed.value ? `precision = ${parsed.value}` : `precision = ${this.precision}`;
       case 'delete':
         return `delete ${parsed.name}`;
       case 'vars':
@@ -313,7 +379,7 @@ class Calculator {
       case 'expr': {
         const value = this.evaluate(parsed.expr);
         this.variables.set('ans', value);
-        return `ans = ${formatNumber(value)}`;
+        return `ans = ${this.formatNumber(value)}`;
       }
       case 'equation': {
         const result = this.solve(parsed.left, parsed.right);
@@ -325,7 +391,7 @@ class Calculator {
         const value = this.evaluate(parsed.expr);
         this.variables.set(parsed.name, value);
         this.variables.set('ans', value);
-        return `${parsed.name} = ${formatNumber(value)}`;
+        return `${parsed.name} = ${this.formatNumber(value)}`;
       }
       case 'fnAssign':
         if (BUILTINS.has(parsed.name)) throw new CalcError(`cannot replace built-in function "${parsed.name}"`);
@@ -337,6 +403,9 @@ class Calculator {
         return this.formatVars();
       case 'funcs':
         return this.formatFunctions();
+      case 'precision':
+        if (parsed.value) this.precision = parsed.value;
+        return `precision = ${this.precision}`;
       default:
         throw new CalcError('unknown statement');
     }
@@ -347,6 +416,16 @@ class Calculator {
     const lower = trimmed.toLowerCase();
     if (lower === 'vars' || lower === 'variables') return { kind: 'vars' };
     if (lower === 'funcs' || lower === 'functions') return { kind: 'funcs' };
+
+    const precisionMatch = /^(?:precision|prec)(?:\s+(\d+))?$/.exec(lower);
+    if (precisionMatch) {
+      if (!precisionMatch[1]) return { kind: 'precision' };
+      const value = Number(precisionMatch[1]);
+      if (!Number.isInteger(value) || value < 1 || value > 15) {
+        throw new CalcError('precision must be between 1 and 15');
+      }
+      return { kind: 'precision', value };
+    }
 
     const deleteMatch = /^(?:del|delete|rm|unset)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(\s*\))?$/.exec(trimmed);
     if (deleteMatch) return { kind: 'delete', name: deleteMatch[1] };
@@ -420,13 +499,66 @@ class Calculator {
       throw new CalcError('equations must contain exactly one unknown variable');
     }
     const unknown = [...names][0];
-    const diff = this.toLinear(left, unknown).sub(this.toLinear(right, unknown));
-    if (diff.coef.isZero()) {
-      if (diff.constant.isZero()) return 'all values satisfy this equation';
-      throw new CalcError('equation has no solution');
+    const diff = this.toPolynomial(left, unknown).sub(this.toPolynomial(right, unknown));
+    const degree = diff.degree();
+    if (degree === -1) return 'all values satisfy this equation';
+    if (degree === 0) throw new CalcError('equation has no solution');
+    if (degree === 1) {
+      const solution = diff.coeffs[0].neg().div(diff.coeffs[1]);
+      return `${unknown} = ${solution.toString()}`;
     }
-    const solution = diff.constant.neg().div(diff.coef);
-    return `${unknown} = ${solution.toString()}`;
+    return this.solveQuadratic(unknown, diff);
+  }
+
+  solveQuadratic(unknown, polynomial) {
+    const c = polynomial.coeffs[0];
+    const b = polynomial.coeffs[1];
+    const a = polynomial.coeffs[2];
+    const discriminant = b.mul(b).sub(new Rational(4).mul(a).mul(c));
+    if (discriminant.n < 0) throw new CalcError('equation has no real solution');
+
+    const exactRoot = sqrtRational(discriminant);
+    const denominator = new Rational(2).mul(a);
+    if (exactRoot) {
+      const first = b.neg().sub(exactRoot).div(denominator);
+      const second = b.neg().add(exactRoot).div(denominator);
+      if (first.n === second.n && first.d === second.d) return `${unknown} = ${first.toString()}`;
+      return `${unknown} = ${first.toString()} or ${unknown} = ${second.toString()}`;
+    }
+
+    const root = Math.sqrt(discriminant.toNumber());
+    const first = (b.neg().toNumber() - root) / denominator.toNumber();
+    const second = (b.neg().toNumber() + root) / denominator.toNumber();
+    return `${unknown} ~= ${this.formatNumber(first)} or ${unknown} ~= ${this.formatNumber(second)}`;
+  }
+
+  toPolynomial(expr, unknown) {
+    switch (expr.type) {
+      case 'number':
+        return new Polynomial([rationalFromNumber(expr.value)]);
+      case 'identifier':
+        if (expr.name === unknown) return new Polynomial([new Rational(0), new Rational(1)]);
+        return new Polynomial([rationalFromNumber(this.evaluate(expr))]);
+      case 'unary':
+        return this.toPolynomial(expr.expr, unknown).neg();
+      case 'binary': {
+        const left = this.toPolynomial(expr.left, unknown);
+        const right = this.toPolynomial(expr.right, unknown);
+        if (expr.op === '+') return left.add(right);
+        if (expr.op === '-') return left.sub(right);
+        if (expr.op === '*') return left.mul(right);
+        if (expr.op === '/') return left.div(right);
+        if (expr.op === '^') return left.pow(right);
+        throw new CalcError(`unsupported operator "${expr.op}"`);
+      }
+      case 'call':
+        if (containsIdentifier(expr, unknown)) {
+          throw new CalcError('functions containing the unknown cannot be solved yet');
+        }
+        return new Polynomial([rationalFromNumber(this.evaluate(expr))]);
+      default:
+        throw new CalcError('unknown expression');
+    }
   }
 
   toLinear(expr, unknown) {
@@ -474,17 +606,23 @@ class Calculator {
   }
 
   formatVars() {
-    const entries = [...this.variables.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, value]) => `${name} = ${formatNumber(value)}`);
-    return entries.length ? entries.join('\n') : 'no variables';
+    const rows = [['Name', 'Value']];
+    for (const [name, value] of [...this.variables.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      rows.push([name, this.formatNumber(value)]);
+    }
+    return rows.length > 1 ? formatTable(rows) : 'no variables';
   }
 
   formatFunctions() {
-    const entries = [...this.functions.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, fn]) => `${name}(${fn.params.join(', ')})`);
-    return entries.length ? entries.join('\n') : 'no functions';
+    const rows = [['Name', 'Parameters']];
+    for (const [name, fn] of [...this.functions.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      rows.push([name, fn.params.join(', ')]);
+    }
+    return rows.length > 1 ? formatTable(rows) : 'no functions';
+  }
+
+  formatNumber(value) {
+    return formatNumber(value, this.precision);
   }
 }
 
@@ -577,15 +715,37 @@ function gcd(a, b) {
   return a || 1;
 }
 
-function formatNumber(value) {
+function sqrtRational(value) {
+  if (value.n < 0) return null;
+  const n = integerSqrt(value.n);
+  const d = integerSqrt(value.d);
+  if (n * n === value.n && d * d === value.d) return new Rational(n, d);
+  return null;
+}
+
+function integerSqrt(value) {
+  return Math.floor(Math.sqrt(value));
+}
+
+function formatTable(rows) {
+  const widths = rows[0].map((_, column) => {
+    return Math.max(...rows.map((row) => String(row[column]).length));
+  });
+  return rows
+    .map((row) => row.map((cell, column) => String(cell).padEnd(widths[column])).join('  ').trimEnd())
+    .join('\n');
+}
+
+function formatNumber(value, precision = 12) {
   if (!Number.isFinite(value)) return String(value);
   if (Math.abs(value) < 1e-12) return '0';
-  return Number(value.toPrecision(12)).toString();
+  return Number(value.toPrecision(precision)).toString();
 }
 
 module.exports = {
   Calculator,
   CalcError,
   Parser,
+  Polynomial,
   Rational
 };
