@@ -1,0 +1,22 @@
+{
+  "name": "calccu",
+  "version": "0.1.0",
+  "description": "A small live CLI/TUI calculator with variables, functions, ans, and simple equation solving.",
+  "bin": {
+    "calccu": "./bin/calccu.js"
+  },
+  "scripts": {
+    "start": "node ./bin/calccu.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "calculator",
+    "cli",
+    "tui",
+    "math"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
