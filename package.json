@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A live CLI/TUI calculator with variables, functions, units, ans, and equation solving.",
   "bin": {
-    "calccu": "./bin/calccu.js"
+    "calccu": "bin/calccu.js"
   },
   "scripts": {
     "start": "node ./bin/calccu.js",
