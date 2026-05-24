@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Calculator } = require('../src/engine');
 const { applyEditKey, formatOutput, helpText, readEscapeSequence } = require('../src/tui');
+const pkg = require('../package.json');
 
 const calc = new Calculator();
 const stdin = process.stdin;
@@ -17,6 +18,7 @@ let history = [];
 let commandHistory = [];
 let commandHistoryIndex = 0;
 let draftInput = '';
+let scrollOffset = 0;
 const historyPath = process.env.CALCCU_HISTORY || path.join(os.homedir(), '.calccu_history');
 
 loadCommandHistory();
@@ -31,10 +33,13 @@ function previewFor(text) {
   const command = trimmed.toLowerCase();
   if (command === 'help' || command === '?') return 'show help';
   if (command === 'clear' || command === 'cls') return 'clear terminal';
+  if (command === 'clear history') return 'clear terminal';
+  if (command === 'history') return 'show command history';
   if (command === 'quit' || command === 'exit') return 'quit';
   try {
     return calc.preview(trimmed);
   } catch (error) {
+    if (isLikelyIncomplete(error)) return '';
     return error.message;
   }
 }
@@ -43,7 +48,8 @@ function render() {
   const preview = previewFor(input);
   let row = 1;
   clearScreen();
-  stdout.write('calccu  (? for help, Ctrl+C to quit)\n\n');
+  const scrolled = scrollOffset > 0 ? `, PageDown newer, ${scrollOffset} back` : '';
+  stdout.write(`calccu  (? for help, Ctrl+C to quit${scrolled})\n\n`);
   row += 2;
 
   for (const entry of visibleHistory()) {
@@ -93,13 +99,19 @@ function commit() {
     shutdown();
     return;
   }
-  if (command === 'clear' || command === 'cls') {
+  if (command === 'clear' || command === 'cls' || command === 'clear history') {
     history = [];
+    scrollOffset = 0;
     render();
     return;
   }
   if (command === 'help' || command === '?') {
     rememberResult(text, helpText());
+    render();
+    return;
+  }
+  if (command === 'history') {
+    rememberResult(text, formatCommandHistory());
     render();
     return;
   }
@@ -124,15 +136,18 @@ function rememberCommand(text) {
 function rememberResult(text, output) {
   history.push({ input: text, output });
   if (history.length > 200) history = history.slice(-200);
+  scrollOffset = 0;
 }
 
 function visibleHistory() {
+  if (history.length === 0) return [];
   const rows = stdout.rows || 30;
   const maxRows = Math.max(6, rows - 6);
   let used = 0;
   const visible = [];
+  const start = Math.max(0, history.length - 1 - scrollOffset);
 
-  for (let i = history.length - 1; i >= 0; i -= 1) {
+  for (let i = start; i >= 0; i -= 1) {
     const entryRows = 2 + entryLineCount(history[i].output);
     if (visible.length > 0 && used + entryRows > maxRows) break;
     visible.unshift(history[i]);
@@ -140,6 +155,15 @@ function visibleHistory() {
   }
 
   return visible;
+}
+
+function scrollOlder() {
+  if (history.length === 0) return;
+  scrollOffset = Math.min(history.length - 1, scrollOffset + Math.max(1, visibleHistory().length));
+}
+
+function scrollNewer() {
+  scrollOffset = Math.max(0, scrollOffset - Math.max(1, visibleHistory().length));
 }
 
 function entryLineCount(output) {
@@ -183,6 +207,18 @@ function saveCommandHistory() {
   }
 }
 
+function formatCommandHistory() {
+  const start = Math.max(0, commandHistory.length - 20);
+  const rows = commandHistory.slice(start).map((command, index) => {
+    return `${String(start + index + 1).padStart(4, ' ')}  ${command}`;
+  });
+  return rows.length ? rows.join('\n') : 'no command history';
+}
+
+function isLikelyIncomplete(error) {
+  return /^(invalid expression|expected "\)"|expected "eof")$/.test(error.message);
+}
+
 function shutdown() {
   if (!running) return;
   running = false;
@@ -223,6 +259,17 @@ function handleKey(key) {
   }
   if (key === '\u000c') {
     history = [];
+    scrollOffset = 0;
+    render();
+    return;
+  }
+  if (key === '\u001b[5~') {
+    scrollOlder();
+    render();
+    return;
+  }
+  if (key === '\u001b[6~') {
+    scrollNewer();
     render();
     return;
   }
@@ -249,6 +296,16 @@ function handleKey(key) {
 process.on('exit', () => {
   if (stdin.isTTY) stdin.setRawMode(false);
 });
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(helpText());
+  process.exit(0);
+}
+
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(pkg.version);
+  process.exit(0);
+}
 
 if (process.argv.length > 2) {
   const expression = process.argv.slice(2).join(' ');

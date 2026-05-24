@@ -24,7 +24,95 @@ const CONSTANTS = new Map([
   ['pi', Math.PI]
 ]);
 
+const UNITS = new Map([
+  ['mm', { factor: 0.001, dimension: 'length' }],
+  ['cm', { factor: 0.01, dimension: 'length' }],
+  ['m', { factor: 1, dimension: 'length' }],
+  ['km', { factor: 1000, dimension: 'length' }],
+  ['in', { factor: 0.0254, dimension: 'length' }],
+  ['ft', { factor: 0.3048, dimension: 'length' }],
+  ['yd', { factor: 0.9144, dimension: 'length' }],
+  ['mi', { factor: 1609.344, dimension: 'length' }],
+  ['mg', { factor: 0.000001, dimension: 'mass' }],
+  ['g', { factor: 0.001, dimension: 'mass' }],
+  ['kg', { factor: 1, dimension: 'mass' }],
+  ['oz', { factor: 0.028349523125, dimension: 'mass' }],
+  ['lb', { factor: 0.45359237, dimension: 'mass' }],
+  ['ms', { factor: 0.001, dimension: 'time' }],
+  ['s', { factor: 1, dimension: 'time' }],
+  ['min', { factor: 60, dimension: 'time' }],
+  ['h', { factor: 3600, dimension: 'time' }],
+  ['day', { factor: 86400, dimension: 'time' }]
+]);
+
 class CalcError extends Error {}
+
+class Quantity {
+  constructor(value, dimensions, unit = '') {
+    this.value = value;
+    this.dimensions = normalizeDimensions(dimensions);
+    this.unit = isDimensionless(this.dimensions) ? '' : unit;
+  }
+
+  add(other) {
+    other = asQuantity(other);
+    this.assertSameDimensions(other);
+    return new Quantity(this.value + other.value, this.dimensions, this.unit || other.unit);
+  }
+
+  sub(other) {
+    other = asQuantity(other);
+    this.assertSameDimensions(other);
+    return new Quantity(this.value - other.value, this.dimensions, this.unit || other.unit);
+  }
+
+  mul(other) {
+    if (other instanceof Quantity) {
+      return new Quantity(this.value * other.value, combineDimensions(this.dimensions, other.dimensions, 1), combineUnitNames(this.unit, other.unit, '*'));
+    }
+    return new Quantity(this.value * other, this.dimensions, this.unit);
+  }
+
+  div(other) {
+    if (other instanceof Quantity) {
+      if (other.value === 0) throw new CalcError('division by zero');
+      return new Quantity(this.value / other.value, combineDimensions(this.dimensions, other.dimensions, -1), combineUnitNames(this.unit, other.unit, '/'));
+    }
+    if (other === 0) throw new CalcError('division by zero');
+    return new Quantity(this.value / other, this.dimensions, this.unit);
+  }
+
+  pow(other) {
+    if (other instanceof Quantity) throw new CalcError('unit exponents are not supported');
+    if (!Number.isInteger(other)) throw new CalcError('unit powers must be integers');
+    const dimensions = {};
+    for (const [name, power] of Object.entries(this.dimensions)) dimensions[name] = power * other;
+    return new Quantity(this.value ** other, dimensions, other === 1 ? this.unit : `${this.unit}^${other}`);
+  }
+
+  neg() {
+    return new Quantity(-this.value, this.dimensions, this.unit);
+  }
+
+  convertTo(unitName) {
+    const unit = UNITS.get(unitName);
+    if (!unit) throw new CalcError(`unknown unit "${unitName}"`);
+    const target = unitQuantity(unitName);
+    this.assertSameDimensions(target);
+    return new Quantity(this.value, this.dimensions, unitName);
+  }
+
+  assertSameDimensions(other) {
+    if (!sameDimensions(this.dimensions, other.dimensions)) {
+      throw new CalcError('incompatible units');
+    }
+  }
+
+  toNumber() {
+    if (!isDimensionless(this.dimensions)) throw new CalcError('expected a number, got a unit value');
+    return this.value;
+  }
+}
 
 class Rational {
   constructor(n, d = 1) {
@@ -353,11 +441,13 @@ class Calculator {
     const parsed = this.parseStatement(input);
     switch (parsed.kind) {
       case 'expr':
-        return this.formatNumber(this.evaluate(parsed.expr));
+        return this.formatValue(this.evaluate(parsed.expr));
+      case 'convert':
+        return this.formatValue(this.evaluate(parsed.expr).convertTo(parsed.unit));
       case 'equation':
         return this.solve(parsed.left, parsed.right);
       case 'assign':
-        return `${parsed.name} = ${this.formatNumber(this.evaluate(parsed.expr))}`;
+        return `${parsed.name} = ${this.formatValue(this.evaluate(parsed.expr))}`;
       case 'fnAssign':
         return `save ${parsed.name}(${parsed.params.join(', ')})`;
       case 'precision':
@@ -368,6 +458,10 @@ class Calculator {
         return this.formatVars();
       case 'funcs':
         return this.formatFunctions();
+      case 'units':
+        return this.formatUnits();
+      case 'history':
+        return 'history is available in interactive mode';
       default:
         return '';
     }
@@ -379,7 +473,12 @@ class Calculator {
       case 'expr': {
         const value = this.evaluate(parsed.expr);
         this.variables.set('ans', value);
-        return `ans = ${this.formatNumber(value)}`;
+        return `ans = ${this.formatValue(value)}`;
+      }
+      case 'convert': {
+        const value = this.evaluate(parsed.expr).convertTo(parsed.unit);
+        this.variables.set('ans', value);
+        return `ans = ${this.formatValue(value)}`;
       }
       case 'equation': {
         const result = this.solve(parsed.left, parsed.right);
@@ -388,13 +487,15 @@ class Calculator {
       }
       case 'assign': {
         if (parsed.name === 'ans') throw new CalcError('ans is managed automatically');
+        if (UNITS.has(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
         const value = this.evaluate(parsed.expr);
         this.variables.set(parsed.name, value);
         this.variables.set('ans', value);
-        return `${parsed.name} = ${this.formatNumber(value)}`;
+        return `${parsed.name} = ${this.formatValue(value)}`;
       }
       case 'fnAssign':
         if (BUILTINS.has(parsed.name)) throw new CalcError(`cannot replace built-in function "${parsed.name}"`);
+        if (UNITS.has(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
         this.functions.set(parsed.name, { params: parsed.params, body: parsed.body });
         return `${parsed.name}(${parsed.params.join(', ')}) saved`;
       case 'delete':
@@ -403,6 +504,10 @@ class Calculator {
         return this.formatVars();
       case 'funcs':
         return this.formatFunctions();
+      case 'units':
+        return this.formatUnits();
+      case 'history':
+        return 'history is available in interactive mode';
       case 'precision':
         if (parsed.value) this.precision = parsed.value;
         return `precision = ${this.precision}`;
@@ -416,6 +521,11 @@ class Calculator {
     const lower = trimmed.toLowerCase();
     if (lower === 'vars' || lower === 'variables') return { kind: 'vars' };
     if (lower === 'funcs' || lower === 'functions') return { kind: 'funcs' };
+    if (lower === 'history') return { kind: 'history' };
+    if (lower === 'units') return { kind: 'units' };
+
+    const listMatch = /^(?:ls|list)\s+(vars?|variables|funcs?|functions)$/.exec(lower);
+    if (listMatch) return listMatch[1].startsWith('var') ? { kind: 'vars' } : { kind: 'funcs' };
 
     const precisionMatch = /^(?:precision|prec)(?:\s+(\d+))?$/.exec(lower);
     if (precisionMatch) {
@@ -427,8 +537,11 @@ class Calculator {
       return { kind: 'precision', value };
     }
 
-    const deleteMatch = /^(?:del|delete|rm|unset)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(\s*\))?$/.exec(trimmed);
+    const deleteMatch = /^(?:del|delete|rm|unset)\s+(?:(?:var|fn|func|function)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(\s*\))?$/.exec(trimmed);
     if (deleteMatch) return { kind: 'delete', name: deleteMatch[1] };
+
+    const convert = parseConversion(trimmed);
+    if (convert) return convert;
 
     const topEquals = findTopLevelEquals(trimmed);
     if (topEquals !== -1) {
@@ -465,9 +578,10 @@ class Calculator {
         if (locals.has(expr.name)) return locals.get(expr.name);
         if (this.variables.has(expr.name)) return this.variables.get(expr.name);
         if (CONSTANTS.has(expr.name)) return CONSTANTS.get(expr.name);
+        if (UNITS.has(expr.name)) return unitQuantity(expr.name);
         throw new CalcError(`unknown variable "${expr.name}"`);
       case 'unary':
-        return -this.evaluate(expr.expr, locals);
+        return negateValue(this.evaluate(expr.expr, locals));
       case 'binary':
         return evalBinary(expr.op, this.evaluate(expr.left, locals), this.evaluate(expr.right, locals));
       case 'call':
@@ -479,7 +593,7 @@ class Calculator {
 
   evaluateCall(expr, locals) {
     const args = expr.args.map((arg) => this.evaluate(arg, locals));
-    if (BUILTINS.has(expr.name)) return BUILTINS.get(expr.name)(...args);
+    if (BUILTINS.has(expr.name)) return BUILTINS.get(expr.name)(...args.map(numberValue));
     const fn = this.functions.get(expr.name);
     if (!fn) throw new CalcError(`unknown function "${expr.name}"`);
     if (args.length !== fn.params.length) {
@@ -608,7 +722,7 @@ class Calculator {
   formatVars() {
     const rows = [['Name', 'Value']];
     for (const [name, value] of [...this.variables.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      rows.push([name, this.formatNumber(value)]);
+      rows.push([name, this.formatValue(value)]);
     }
     return rows.length > 1 ? formatTable(rows) : 'no variables';
   }
@@ -621,8 +735,23 @@ class Calculator {
     return rows.length > 1 ? formatTable(rows) : 'no functions';
   }
 
+  formatUnits() {
+    const groups = new Map();
+    for (const [name, unit] of UNITS.entries()) {
+      if (!groups.has(unit.dimension)) groups.set(unit.dimension, []);
+      groups.get(unit.dimension).push(name);
+    }
+    return [...groups.entries()]
+      .map(([dimension, names]) => `${dimension}: ${names.join(', ')}`)
+      .join('\n');
+  }
+
   formatNumber(value) {
     return formatNumber(value, this.precision);
+  }
+
+  formatValue(value) {
+    return formatValue(value, this.precision);
   }
 }
 
@@ -657,16 +786,70 @@ function findTopLevelEquals(input) {
   return -1;
 }
 
-function evalBinary(op, left, right) {
-  if (op === '+') return left + right;
-  if (op === '-') return left - right;
-  if (op === '*') return left * right;
-  if (op === '/') {
-    if (right === 0) throw new CalcError('division by zero');
-    return left / right;
+function parseConversion(input) {
+  let depth = 0;
+  for (let i = input.length - 1; i >= 0; i -= 1) {
+    const char = input[i];
+    if (char === ')') depth += 1;
+    if (char === '(') depth -= 1;
+    if (depth === 0 && /\s/.test(char)) {
+      const right = input.slice(i).trim();
+      const left = input.slice(0, i).trim();
+      const match = /^to\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(right);
+      if (match && left) return { kind: 'convert', expr: new Parser(left).parse(), unit: match[1] };
+    }
   }
-  if (op === '^') return left ** right;
+  return null;
+}
+
+function evalBinary(op, left, right) {
+  if (op === '+') return addValues(left, right);
+  if (op === '-') return subValues(left, right);
+  if (op === '*') return mulValues(left, right);
+  if (op === '/') {
+    return divValues(left, right);
+  }
+  if (op === '^') return powValues(left, right);
   throw new CalcError(`unknown operator "${op}"`);
+}
+
+function addValues(left, right) {
+  if (left instanceof Quantity) return left.add(right);
+  if (right instanceof Quantity) return asQuantity(left).add(right);
+  return left + right;
+}
+
+function subValues(left, right) {
+  if (left instanceof Quantity) return left.sub(right);
+  if (right instanceof Quantity) return asQuantity(left).sub(right);
+  return left - right;
+}
+
+function mulValues(left, right) {
+  if (left instanceof Quantity) return left.mul(right);
+  if (right instanceof Quantity) return right.mul(left);
+  return left * right;
+}
+
+function divValues(left, right) {
+  if (left instanceof Quantity) return left.div(right);
+  if (right instanceof Quantity) return asQuantity(left).div(right);
+  if (right === 0) throw new CalcError('division by zero');
+  return left / right;
+}
+
+function powValues(left, right) {
+  if (left instanceof Quantity) return left.pow(numberValue(right));
+  if (right instanceof Quantity) throw new CalcError('unit exponents are not supported');
+  return left ** right;
+}
+
+function negateValue(value) {
+  return value instanceof Quantity ? value.neg() : -value;
+}
+
+function numberValue(value) {
+  return value instanceof Quantity ? value.toNumber() : value;
 }
 
 function collectIdentifiers(expr, names) {
@@ -706,6 +889,48 @@ function asRational(value) {
   return value instanceof Rational ? value : new Rational(value);
 }
 
+function asQuantity(value) {
+  return value instanceof Quantity ? value : new Quantity(value, {});
+}
+
+function unitQuantity(name) {
+  const unit = UNITS.get(name);
+  return new Quantity(unit.factor, { [unit.dimension]: 1 }, name);
+}
+
+function normalizeDimensions(dimensions) {
+  const normalized = {};
+  for (const [name, power] of Object.entries(dimensions)) {
+    if (Math.abs(power) > 1e-12) normalized[name] = power;
+  }
+  return normalized;
+}
+
+function combineDimensions(left, right, sign) {
+  const dimensions = { ...left };
+  for (const [name, power] of Object.entries(right)) {
+    dimensions[name] = (dimensions[name] || 0) + power * sign;
+  }
+  return normalizeDimensions(dimensions);
+}
+
+function sameDimensions(left, right) {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+}
+
+function isDimensionless(dimensions) {
+  return Object.keys(dimensions).length === 0;
+}
+
+function combineUnitNames(left, right, op) {
+  if (!left) return right ? (op === '/' ? `1/${right}` : right) : '';
+  if (!right) return left;
+  return `${left}${op}${right}`;
+}
+
 function gcd(a, b) {
   while (b !== 0) {
     const t = b;
@@ -734,6 +959,21 @@ function formatTable(rows) {
   return rows
     .map((row) => row.map((cell, column) => String(cell).padEnd(widths[column])).join('  ').trimEnd())
     .join('\n');
+}
+
+function formatValue(value, precision = 12) {
+  if (!(value instanceof Quantity)) return formatNumber(value, precision);
+  const unitName = value.unit || formatDimensions(value.dimensions);
+  const amount = unitName && UNITS.has(unitName) ? value.value / UNITS.get(unitName).factor : value.value;
+  return unitName ? `${formatNumber(amount, precision)} ${unitName}` : formatNumber(amount, precision);
+}
+
+function formatDimensions(dimensions) {
+  const entries = Object.entries(dimensions);
+  if (entries.length === 0) return '';
+  return entries
+    .map(([name, power]) => (power === 1 ? name : `${name}^${power}`))
+    .join('*');
 }
 
 function formatNumber(value, precision = 12) {

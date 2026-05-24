@@ -1,7 +1,7 @@
 {
   "name": "calccu",
   "version": "0.1.0",
-  "description": "A small live CLI/TUI calculator with variables, functions, ans, and simple equation solving.",
+  "description": "A live CLI/TUI calculator with variables, functions, units, ans, and equation solving.",
   "bin": {
     "calccu": "./bin/calccu.js"
   },
@@ -13,8 +13,22 @@
     "calculator",
     "cli",
     "tui",
-    "math"
+    "math",
+    "units"
   ],
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheJeme/calccu.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TheJeme/calccu/issues"
+  },
+  "homepage": "https://github.com/TheJeme/calccu#readme",
   "license": "MIT",
   "engines": {
     "node": ">=18"

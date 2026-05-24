@@ -62,5 +62,17 @@ test('formats variables and functions as tables', () => {
   calc.execute('x = 2');
   calc.execute('f(t) = t + 1');
   assert.equal(calc.execute('vars'), 'Name  Value\nans   2\nx     2');
+  assert.equal(calc.execute('ls vars'), 'Name  Value\nans   2\nx     2');
   assert.equal(calc.execute('funcs'), 'Name  Parameters\nf     t');
+  assert.equal(calc.execute('list functions'), 'Name  Parameters\nf     t');
+});
+
+test('evaluates and converts simple units', () => {
+  const calc = new Calculator();
+  assert.equal(calc.execute('2m + 30cm'), 'ans = 2.3 m');
+  assert.equal(calc.execute('5km to m'), 'ans = 5000 m');
+  assert.equal(calc.execute('10s / 2'), 'ans = 5 s');
+  assert.equal(calc.execute('10m / (2m)'), 'ans = 5');
+  assert.throws(() => calc.execute('2m + 3s'), /incompatible units/);
+  assert.equal(calc.execute('units').includes('length: mm, cm, m, km'), true);
 });
