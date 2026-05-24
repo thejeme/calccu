@@ -76,3 +76,21 @@ test('evaluates and converts simple units', () => {
   assert.throws(() => calc.execute('2m + 3s'), /incompatible units/);
   assert.equal(calc.execute('units').includes('length: mm, cm, m, km'), true);
 });
+
+test('converts requested unit categories', () => {
+  const calc = new Calculator();
+  assert.equal(calc.execute('32F to C'), 'ans = 0 C');
+  assert.equal(calc.execute('1km to m'), 'ans = 1000 m');
+  assert.equal(calc.execute('1lb to kg'), 'ans = 0.45359237 kg');
+  assert.equal(calc.execute('1acre to m2'), 'ans = 4046.8564224 m2');
+  assert.equal(calc.execute('1gal to L'), 'ans = 3.785411784 L');
+  assert.equal(calc.execute('1kWh to J'), 'ans = 3600000 J');
+  assert.equal(calc.execute('60mph to kmh'), 'ans = 96.56064 kmh');
+  assert.equal(calc.execute('2h to min'), 'ans = 120 min');
+  assert.equal(calc.execute('1MiB to B'), 'ans = 1048576 B');
+});
+
+test('rejects temperature arithmetic', () => {
+  const calc = new Calculator();
+  assert.throws(() => calc.execute('20C + 10C'), /temperature arithmetic/);
+});

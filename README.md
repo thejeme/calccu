@@ -80,6 +80,8 @@ saved between sessions in `~/.calccu_history`.
 2 + 3 * 4
 2m + 30cm
 5km to m
+32F to C
+1MiB to B
 ```
 
 ```text
@@ -108,7 +110,8 @@ x^2 - 4 = 0
 - Variables
 - User-defined functions
 - Fraction-style input through division, such as `1/3x = 2`
-- Basic units for length, mass, and time
+- Unit categories: temperature, length, weight, area, volume, energy, speed,
+  time, and data
 - Unit conversion with `to`, such as `5km to m`
 - Configurable displayed significant digits with `precision 8`
 - Built-in constants: `pi`, `e`
@@ -121,6 +124,12 @@ as `2x = 3` producing `x = 3/2`.
 
 Supported units:
 
+- Temperature: `C`, `F`, `K`, `degC`, `degF`
 - Length: `mm`, `cm`, `m`, `km`, `in`, `ft`, `yd`, `mi`
-- Mass: `mg`, `g`, `kg`, `oz`, `lb`
-- Time: `ms`, `s`, `min`, `h`, `day`
+- Weight: `mg`, `g`, `kg`, `t`, `oz`, `lb`, `st`
+- Area: `m2`, `cm2`, `km2`, `ft2`, `in2`, `acre`, `ha`
+- Volume: `m3`, `cm3`, `mm3`, `L`, `l`, `mL`, `ml`, `gal`, `qt`, `pt`, `cup`, `fl_oz`
+- Energy: `J`, `kJ`, `cal`, `kcal`, `Wh`, `kWh`, `BTU`, `btu`
+- Speed: `mps`, `kmh`, `mph`, `knot`, `fps`
+- Time: `ms`, `s`, `min`, `h`, `day`, `week`
+- Data: `bit`, `b`, `B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB`, `TiB`

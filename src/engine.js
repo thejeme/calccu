@@ -25,27 +25,84 @@ const CONSTANTS = new Map([
 ]);
 
 const UNITS = new Map([
-  ['mm', { factor: 0.001, dimension: 'length' }],
-  ['cm', { factor: 0.01, dimension: 'length' }],
-  ['m', { factor: 1, dimension: 'length' }],
-  ['km', { factor: 1000, dimension: 'length' }],
-  ['in', { factor: 0.0254, dimension: 'length' }],
-  ['ft', { factor: 0.3048, dimension: 'length' }],
-  ['yd', { factor: 0.9144, dimension: 'length' }],
-  ['mi', { factor: 1609.344, dimension: 'length' }],
-  ['mg', { factor: 0.000001, dimension: 'mass' }],
-  ['g', { factor: 0.001, dimension: 'mass' }],
-  ['kg', { factor: 1, dimension: 'mass' }],
-  ['oz', { factor: 0.028349523125, dimension: 'mass' }],
-  ['lb', { factor: 0.45359237, dimension: 'mass' }],
-  ['ms', { factor: 0.001, dimension: 'time' }],
-  ['s', { factor: 1, dimension: 'time' }],
-  ['min', { factor: 60, dimension: 'time' }],
-  ['h', { factor: 3600, dimension: 'time' }],
-  ['day', { factor: 86400, dimension: 'time' }]
+  ['C', { dimension: 'temperature', category: 'temperature', toBase: (v) => v + 273.15, fromBase: (v) => v - 273.15 }],
+  ['F', { dimension: 'temperature', category: 'temperature', toBase: (v) => (v + 459.67) * 5 / 9, fromBase: (v) => v * 9 / 5 - 459.67 }],
+  ['K', { dimension: 'temperature', category: 'temperature', toBase: (v) => v, fromBase: (v) => v }],
+  ['degC', { dimension: 'temperature', category: 'temperature', toBase: (v) => v + 273.15, fromBase: (v) => v - 273.15 }],
+  ['degF', { dimension: 'temperature', category: 'temperature', toBase: (v) => (v + 459.67) * 5 / 9, fromBase: (v) => v * 9 / 5 - 459.67 }],
+  ['mm', { factor: 0.001, dimension: 'length', category: 'length' }],
+  ['cm', { factor: 0.01, dimension: 'length', category: 'length' }],
+  ['m', { factor: 1, dimension: 'length', category: 'length' }],
+  ['km', { factor: 1000, dimension: 'length', category: 'length' }],
+  ['in', { factor: 0.0254, dimension: 'length', category: 'length' }],
+  ['ft', { factor: 0.3048, dimension: 'length', category: 'length' }],
+  ['yd', { factor: 0.9144, dimension: 'length', category: 'length' }],
+  ['mi', { factor: 1609.344, dimension: 'length', category: 'length' }],
+  ['m2', { factor: 1, dimension: 'area', category: 'area' }],
+  ['cm2', { factor: 0.0001, dimension: 'area', category: 'area' }],
+  ['km2', { factor: 1000000, dimension: 'area', category: 'area' }],
+  ['ft2', { factor: 0.09290304, dimension: 'area', category: 'area' }],
+  ['in2', { factor: 0.00064516, dimension: 'area', category: 'area' }],
+  ['acre', { factor: 4046.8564224, dimension: 'area', category: 'area' }],
+  ['ha', { factor: 10000, dimension: 'area', category: 'area' }],
+  ['m3', { factor: 1, dimension: 'volume', category: 'volume' }],
+  ['cm3', { factor: 0.000001, dimension: 'volume', category: 'volume' }],
+  ['mm3', { factor: 0.000000001, dimension: 'volume', category: 'volume' }],
+  ['L', { factor: 0.001, dimension: 'volume', category: 'volume' }],
+  ['l', { factor: 0.001, dimension: 'volume', category: 'volume' }],
+  ['mL', { factor: 0.000001, dimension: 'volume', category: 'volume' }],
+  ['ml', { factor: 0.000001, dimension: 'volume', category: 'volume' }],
+  ['gal', { factor: 0.003785411784, dimension: 'volume', category: 'volume' }],
+  ['qt', { factor: 0.000946352946, dimension: 'volume', category: 'volume' }],
+  ['pt', { factor: 0.000473176473, dimension: 'volume', category: 'volume' }],
+  ['cup', { factor: 0.0002365882365, dimension: 'volume', category: 'volume' }],
+  ['fl_oz', { factor: 0.0000295735295625, dimension: 'volume', category: 'volume' }],
+  ['mg', { factor: 0.000001, dimension: 'mass', category: 'weight' }],
+  ['g', { factor: 0.001, dimension: 'mass', category: 'weight' }],
+  ['kg', { factor: 1, dimension: 'mass', category: 'weight' }],
+  ['t', { factor: 1000, dimension: 'mass', category: 'weight' }],
+  ['oz', { factor: 0.028349523125, dimension: 'mass', category: 'weight' }],
+  ['lb', { factor: 0.45359237, dimension: 'mass', category: 'weight' }],
+  ['st', { factor: 6.35029318, dimension: 'mass', category: 'weight' }],
+  ['J', { factor: 1, dimension: 'energy', category: 'energy' }],
+  ['kJ', { factor: 1000, dimension: 'energy', category: 'energy' }],
+  ['cal', { factor: 4.184, dimension: 'energy', category: 'energy' }],
+  ['kcal', { factor: 4184, dimension: 'energy', category: 'energy' }],
+  ['Wh', { factor: 3600, dimension: 'energy', category: 'energy' }],
+  ['kWh', { factor: 3600000, dimension: 'energy', category: 'energy' }],
+  ['BTU', { factor: 1055.05585262, dimension: 'energy', category: 'energy' }],
+  ['btu', { factor: 1055.05585262, dimension: 'energy', category: 'energy' }],
+  ['mps', { factor: 1, dimension: 'speed', category: 'speed' }],
+  ['kmh', { factor: 1000 / 3600, dimension: 'speed', category: 'speed' }],
+  ['mph', { factor: 0.44704, dimension: 'speed', category: 'speed' }],
+  ['knot', { factor: 0.514444444444, dimension: 'speed', category: 'speed' }],
+  ['fps', { factor: 0.3048, dimension: 'speed', category: 'speed' }],
+  ['ms', { factor: 0.001, dimension: 'time', category: 'time' }],
+  ['s', { factor: 1, dimension: 'time', category: 'time' }],
+  ['min', { factor: 60, dimension: 'time', category: 'time' }],
+  ['h', { factor: 3600, dimension: 'time', category: 'time' }],
+  ['day', { factor: 86400, dimension: 'time', category: 'time' }],
+  ['week', { factor: 604800, dimension: 'time', category: 'time' }],
+  ['bit', { factor: 1, dimension: 'data', category: 'data' }],
+  ['b', { factor: 1, dimension: 'data', category: 'data' }],
+  ['B', { factor: 8, dimension: 'data', category: 'data' }],
+  ['KB', { factor: 8000, dimension: 'data', category: 'data' }],
+  ['MB', { factor: 8000000, dimension: 'data', category: 'data' }],
+  ['GB', { factor: 8000000000, dimension: 'data', category: 'data' }],
+  ['TB', { factor: 8000000000000, dimension: 'data', category: 'data' }],
+  ['KiB', { factor: 8192, dimension: 'data', category: 'data' }],
+  ['MiB', { factor: 8388608, dimension: 'data', category: 'data' }],
+  ['GiB', { factor: 8589934592, dimension: 'data', category: 'data' }],
+  ['TiB', { factor: 8796093022208, dimension: 'data', category: 'data' }]
 ]);
 
 class CalcError extends Error {}
+
+class UnitSymbol {
+  constructor(name) {
+    this.name = name;
+  }
+}
 
 class Quantity {
   constructor(value, dimensions, unit = '') {
@@ -56,34 +113,44 @@ class Quantity {
 
   add(other) {
     other = asQuantity(other);
+    assertNotTemperatureArithmetic(this, other);
     this.assertSameDimensions(other);
     return new Quantity(this.value + other.value, this.dimensions, this.unit || other.unit);
   }
 
   sub(other) {
     other = asQuantity(other);
+    assertNotTemperatureArithmetic(this, other);
     this.assertSameDimensions(other);
     return new Quantity(this.value - other.value, this.dimensions, this.unit || other.unit);
   }
 
   mul(other) {
+    if (other instanceof UnitSymbol) other = quantityFromUnit(other.name, 1);
     if (other instanceof Quantity) {
+      assertNotTemperatureCompound(this, other);
       return new Quantity(this.value * other.value, combineDimensions(this.dimensions, other.dimensions, 1), combineUnitNames(this.unit, other.unit, '*'));
     }
+    assertNotTemperatureScale(this);
     return new Quantity(this.value * other, this.dimensions, this.unit);
   }
 
   div(other) {
+    if (other instanceof UnitSymbol) other = quantityFromUnit(other.name, 1);
     if (other instanceof Quantity) {
       if (other.value === 0) throw new CalcError('division by zero');
+      assertNotTemperatureCompound(this, other);
       return new Quantity(this.value / other.value, combineDimensions(this.dimensions, other.dimensions, -1), combineUnitNames(this.unit, other.unit, '/'));
     }
     if (other === 0) throw new CalcError('division by zero');
+    assertNotTemperatureScale(this);
     return new Quantity(this.value / other, this.dimensions, this.unit);
   }
 
   pow(other) {
     if (other instanceof Quantity) throw new CalcError('unit exponents are not supported');
+    if (other instanceof UnitSymbol) throw new CalcError('unit exponents are not supported');
+    assertNotTemperatureScale(this);
     if (!Number.isInteger(other)) throw new CalcError('unit powers must be integers');
     const dimensions = {};
     for (const [name, power] of Object.entries(this.dimensions)) dimensions[name] = power * other;
@@ -97,7 +164,7 @@ class Quantity {
   convertTo(unitName) {
     const unit = UNITS.get(unitName);
     if (!unit) throw new CalcError(`unknown unit "${unitName}"`);
-    const target = unitQuantity(unitName);
+    const target = quantityFromUnit(unitName, 1);
     this.assertSameDimensions(target);
     return new Quantity(this.value, this.dimensions, unitName);
   }
@@ -609,6 +676,7 @@ class Calculator {
     collectIdentifiers(left, names);
     collectIdentifiers(right, names);
     for (const known of [...this.variables.keys(), ...CONSTANTS.keys()]) names.delete(known);
+    for (const unit of UNITS.keys()) names.delete(unit);
     if (names.size !== 1) {
       throw new CalcError('equations must contain exactly one unknown variable');
     }
@@ -738,8 +806,8 @@ class Calculator {
   formatUnits() {
     const groups = new Map();
     for (const [name, unit] of UNITS.entries()) {
-      if (!groups.has(unit.dimension)) groups.set(unit.dimension, []);
-      groups.get(unit.dimension).push(name);
+      if (!groups.has(unit.category)) groups.set(unit.category, []);
+      groups.get(unit.category).push(name);
     }
     return [...groups.entries()]
       .map(([dimension, names]) => `${dimension}: ${names.join(', ')}`)
@@ -814,24 +882,34 @@ function evalBinary(op, left, right) {
 }
 
 function addValues(left, right) {
+  if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
+  if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.add(right);
   if (right instanceof Quantity) return asQuantity(left).add(right);
   return left + right;
 }
 
 function subValues(left, right) {
+  if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
+  if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.sub(right);
   if (right instanceof Quantity) return asQuantity(left).sub(right);
   return left - right;
 }
 
 function mulValues(left, right) {
+  if (left instanceof UnitSymbol && typeof right === 'number') return quantityFromUnit(left.name, right);
+  if (right instanceof UnitSymbol && typeof left === 'number') return quantityFromUnit(right.name, left);
+  if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
+  if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.mul(right);
   if (right instanceof Quantity) return right.mul(left);
   return left * right;
 }
 
 function divValues(left, right) {
+  if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
+  if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.div(right);
   if (right instanceof Quantity) return asQuantity(left).div(right);
   if (right === 0) throw new CalcError('division by zero');
@@ -839,6 +917,8 @@ function divValues(left, right) {
 }
 
 function powValues(left, right) {
+  if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
+  if (right instanceof UnitSymbol) throw new CalcError('unit exponents are not supported');
   if (left instanceof Quantity) return left.pow(numberValue(right));
   if (right instanceof Quantity) throw new CalcError('unit exponents are not supported');
   return left ** right;
@@ -890,12 +970,46 @@ function asRational(value) {
 }
 
 function asQuantity(value) {
+  if (value instanceof UnitSymbol) return quantityFromUnit(value.name, 1);
   return value instanceof Quantity ? value : new Quantity(value, {});
 }
 
 function unitQuantity(name) {
+  return new UnitSymbol(name);
+}
+
+function quantityFromUnit(name, amount) {
   const unit = UNITS.get(name);
-  return new Quantity(unit.factor, { [unit.dimension]: 1 }, name);
+  const value = unit.toBase ? unit.toBase(amount) : amount * unit.factor;
+  return new Quantity(value, { [unit.dimension]: 1 }, name);
+}
+
+function unitBaseAmount(value, unitName) {
+  const unit = UNITS.get(unitName);
+  if (!unit) return value;
+  return unit.fromBase ? unit.fromBase(value) : value / unit.factor;
+}
+
+function isTemperatureQuantity(value) {
+  return value instanceof Quantity && value.dimensions.temperature === 1 && Object.keys(value.dimensions).length === 1;
+}
+
+function assertNotTemperatureArithmetic(left, right) {
+  if (isTemperatureQuantity(left) || isTemperatureQuantity(right)) {
+    throw new CalcError('temperature arithmetic is not supported; use conversion');
+  }
+}
+
+function assertNotTemperatureCompound(left, right) {
+  if (isTemperatureQuantity(left) || isTemperatureQuantity(right)) {
+    throw new CalcError('temperature multiplication and division are not supported');
+  }
+}
+
+function assertNotTemperatureScale(value) {
+  if (isTemperatureQuantity(value)) {
+    throw new CalcError('temperature scaling is not supported');
+  }
 }
 
 function normalizeDimensions(dimensions) {
@@ -962,9 +1076,10 @@ function formatTable(rows) {
 }
 
 function formatValue(value, precision = 12) {
+  if (value instanceof UnitSymbol) value = quantityFromUnit(value.name, 1);
   if (!(value instanceof Quantity)) return formatNumber(value, precision);
   const unitName = value.unit || formatDimensions(value.dimensions);
-  const amount = unitName && UNITS.has(unitName) ? value.value / UNITS.get(unitName).factor : value.value;
+  const amount = unitName && UNITS.has(unitName) ? unitBaseAmount(value.value, unitName) : value.value;
   return unitName ? `${formatNumber(amount, precision)} ${unitName}` : formatNumber(amount, precision);
 }
 
