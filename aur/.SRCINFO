@@ -1,0 +1,13 @@
+pkgbase = calccu
+	pkgdesc = Terminal calculator with variables, functions, units, and equation solving
+	pkgver = 0.2.0
+	pkgrel = 1
+	url = https://github.com/thejeme/calccu
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = nodejs>=18
+	source = calccu-0.2.0::git+https://github.com/thejeme/calccu.git#tag=v0.2.0
+	sha256sums = SKIP
+
+pkgname = calccu

@@ -1,0 +1,302 @@
+.TH CALCCU 1 "June 2026" "calccu 0.2.0" "User Commands"
+.SH NAME
+calccu \- live terminal calculator with variables, functions, units, and equation solving
+.SH SYNOPSIS
+.B calccu
+.br
+.B calccu
+.RI [ options ]
+.RI [ expression ]
+.SH DESCRIPTION
+.B calccu
+is an interactive terminal calculator. It shows a bounded live preview while
+input is edited, evaluates expressions with Enter, stores the latest result in
+.BR ans ,
+and keeps a short visible session history above the prompt.
+.PP
+Automatic answers are displayed as values. Named assignments and equation
+solutions keep their names.
+.PP
+When an expression is passed on the command line,
+.B calccu
+evaluates it and exits. When standard input is not a terminal,
+.B calccu
+evaluates each non-empty input line and exits.
+.SH OPTIONS
+.TP
+.BR -h ", " --help
+Show help text and exit.
+.TP
+.BR -v ", " --version
+Show version information and exit.
+.TP
+.BI "--precision " n
+Set displayed significant digits for this run. The value must be between 1 and
+15.
+.TP
+.B --plain
+Print display-form output. Automatic answers are values; named assignments and
+equation solutions are printed unchanged.
+.TP
+.B --json
+Print one JSON object per evaluated expression. This applies to command-line
+expressions and standard input batches.
+.SH EXAMPLES
+.TP
+Start interactive mode:
+.EX
+calccu
+.EE
+.TP
+Evaluate one expression:
+.EX
+calccu "2 + 2"
+.EE
+Set precision for one run:
+.EX
+calccu --precision 6 "1 / 3"
+.EE
+.TP
+Print JSON:
+.EX
+calccu --json "5km -> m"
+.EE
+.TP
+Convert units:
+.EX
+calccu "5km to m"
+calccu "5km -> m"
+calccu "2 meters to cm"
+calccu "32F -> C"
+.EE
+.TP
+Solve equations:
+.EX
+calccu "2x = 3"
+calccu "x^2 - 4 = 0"
+.EE
+.TP
+Use built-in math functions:
+.EX
+calccu "gcd(12, 18)"
+calccu "lcm(4, 6)"
+calccu "fact(5)"
+.EE
+.TP
+Read expressions from standard input:
+.EX
+printf "2 + 2\\n32F to C\\n" | calccu
+.EE
+.SH INTERACTIVE COMMANDS
+.TP
+.B help
+Show help.
+.TP
+.B ?
+Show help.
+.TP
+.B clear
+Clear visible calculator history.
+.TP
+.B cls
+Clear visible calculator history.
+.TP
+.B clear history
+Clear visible calculator history.
+.TP
+.B quit
+Quit interactive mode.
+.TP
+.B exit
+Quit interactive mode.
+.TP
+.B vars
+List variables.
+.TP
+.B funcs
+List functions.
+.TP
+.B ls vars
+List variables.
+.TP
+.B ls funcs
+List functions.
+.TP
+.B ls units
+Show supported conversion units.
+.TP
+.B list units
+Show supported conversion units.
+.TP
+.B history
+Show recent commands.
+.TP
+.B units
+Show supported conversion units.
+.TP
+.B copy
+Show the current
+.B ans
+value.
+.TP
+.B copy ans
+Show the current
+.B ans
+value.
+.TP
+.B precision
+Show displayed significant digits.
+.TP
+.BI "precision " n
+Set displayed significant digits.
+.TP
+.BI "del " name
+Delete a variable or function.
+.TP
+.BI "delete " name
+Delete a variable or function.
+.TP
+.BI "del var " name
+Delete a variable.
+.TP
+.BI "del fn " name
+Delete a function.
+.TP
+.BI "del func " name
+Delete a function.
+.SH KEYS
+.TP
+.B Enter
+Commit the current input.
+.TP
+.B Ctrl+C
+Quit.
+.TP
+.B Ctrl+L
+Clear visible calculator history.
+.TP
+.B Left/Right
+Move the cursor.
+.TP
+.B Up/Down
+Recall previous or next command.
+.TP
+.B PageUp/PageDown
+Scroll visible-session results.
+.TP
+.B Home/End
+Move to start or end.
+.TP
+.B Ctrl+A/Ctrl+E
+Move to start or end.
+.TP
+.B Ctrl+U/Ctrl+K
+Delete before or after the cursor.
+.TP
+.B Ctrl+W
+Delete the previous word.
+.SH MATH
+.B calccu
+supports the operators
+.BR + ,
+.BR - ,
+.BR * ,
+.BR / ,
+and
+.BR ^ ,
+parentheses, implicit multiplication such as
+.BR 2x ,
+variables, user-defined functions, unit conversion with
+.BR to ,
+the constants
+.B pi
+and
+.BR e ,
+and the latest result variable
+.BR ans .
+.PP
+Basic finite decimal and integer arithmetic is kept exact, avoiding common
+floating-point artifacts such as
+.BR "0.1 + 0.2" .
+.B gcd ,
+.B lcm ,
+and
+.B fact
+also use exact integer arithmetic.
+Built-in transcendental functions and unit conversion factors use JavaScript
+numbers where approximation is expected.
+.PP
+Built-in functions include
+.BR abs ,
+.BR acos ,
+.BR asin ,
+.BR atan ,
+.BR cbrt ,
+.BR ceil ,
+.BR cos ,
+.BR exp ,
+.BR fact ,
+.BR factorial ,
+.BR floor ,
+.BR gcd ,
+.BR hypot ,
+.BR lcm ,
+.BR ln ,
+.BR log ,
+.BR log2 ,
+.BR max ,
+.BR min ,
+.BR round ,
+.BR sign ,
+.BR sin ,
+.BR sqrt ,
+.BR tan ,
+and
+.BR trunc .
+.PP
+Common aliases and plural names are accepted for many units, such as
+.BR meter ,
+.BR metres ,
+.BR feet ,
+.BR hours ,
+and
+.BR bytes .
+Unknown unit-like names include suggestions when there is a close match.
+.PP
+Equation solving supports exact single-variable linear equations and quadratic
+equations up to degree two.
+.SH UNITS
+Supported unit categories are temperature, length, weight, area, volume,
+energy, speed, time, and data.
+.PP
+Canonical output uses short unit symbols such as
+.BR m ,
+.BR ft ,
+.BR h ,
+and
+.BR B .
+.PP
+Use the
+.B units
+interactive command to list all supported unit symbols.
+.SH ENVIRONMENT
+.TP
+.B CALCCU_HISTORY
+Path to the interactive command history file. Overrides the XDG default.
+.TP
+.B XDG_STATE_HOME
+Base directory for the default interactive command history file. Defaults to
+.BR ~/.local/state .
+.SH FILES
+.TP
+.B $XDG_STATE_HOME/calccu/history
+Default interactive command history file.
+.TP
+.B ~/.local/state/calccu/history
+Default interactive command history file when
+.B XDG_STATE_HOME
+is unset.
+.SH LICENSE
+MIT.
+.SH SEE ALSO
+.BR node (1)

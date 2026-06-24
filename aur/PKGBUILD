@@ -1,0 +1,37 @@
+pkgname=calccu
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='Terminal calculator with variables, functions, units, and equation solving'
+arch=('any')
+url='https://github.com/thejeme/calccu'
+license=('MIT')
+depends=('nodejs>=18')
+makedepends=('git')
+source=("${pkgname}-${pkgver}::git+${url}.git#tag=v${pkgver}")
+sha256sums=('SKIP')
+
+check() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  node --test
+}
+
+package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+
+  local libdir="${pkgdir}/usr/lib/node_modules/${pkgname}"
+
+  install -Dm755 "bin/${pkgname}.js" "${libdir}/bin/${pkgname}.js"
+  install -Dm644 package.json "${libdir}/package.json"
+  install -Dm644 README.md "${libdir}/README.md"
+  install -d "${libdir}/src" "${pkgdir}/usr/bin"
+  install -m644 src/*.js "${libdir}/src/"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "man/${pkgname}.1" "${pkgdir}/usr/share/man/man1/${pkgname}.1"
+  if [[ -d completions ]]; then
+    install -Dm644 "completions/${pkgname}.bash" "${pkgdir}/usr/share/bash-completion/completions/${pkgname}"
+    install -Dm644 "completions/_${pkgname}" "${pkgdir}/usr/share/zsh/site-functions/_${pkgname}"
+    install -Dm644 "completions/${pkgname}.fish" "${pkgdir}/usr/share/fish/vendor_completions.d/${pkgname}.fish"
+  fi
+
+  ln -s "../lib/node_modules/${pkgname}/bin/${pkgname}.js" "${pkgdir}/usr/bin/${pkgname}"
+}

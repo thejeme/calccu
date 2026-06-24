@@ -1,0 +1,9 @@
+#compdef calccu
+
+_arguments -s -S \
+  '(-h --help)'{-h,--help}'[show help]' \
+  '(-v --version)'{-v,--version}'[show version]' \
+  '--precision[set displayed significant digits]:precision:(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)' \
+  '--plain[print only the answer value when possible]' \
+  '--json[print one JSON object per evaluated expression]' \
+  '*::expression:_normal'

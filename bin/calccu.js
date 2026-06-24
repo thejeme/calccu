@@ -1,27 +1,106 @@
 #!/usr/bin/env node
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { Calculator } = require('../src/engine');
-const { applyEditKey, formatOutput, helpText, readEscapeSequence } = require('../src/terminal');
+const {
+  applyEditKey,
+  formatDisplayResult,
+  formatOutput,
+  helpText,
+  historyPath: defaultHistoryPath,
+  previewLines,
+  promptView,
+  readEscapeSequence,
+  visibleHistoryEntries,
+  wrapLines
+} = require('../src/terminal');
 const pkg = require('../package.json');
 
-const calc = new Calculator();
+const cli = parseCliArgs(process.argv.slice(2));
+const calc = new Calculator({ precision: cli.precision || undefined });
 const stdin = process.stdin;
 const stdout = process.stdout;
 
 let input = '';
 let cursor = 0;
 let running = true;
+let interactiveStarted = false;
+let rawModeEnabled = false;
 let history = [];
 let commandHistory = [];
 let commandHistoryIndex = 0;
 let draftInput = '';
 let scrollOffset = 0;
-const historyPath = process.env.CALCCU_HISTORY || path.join(os.homedir(), '.calccu_history');
+const historyPath = defaultHistoryPath();
 
-loadCommandHistory();
+function parseCliArgs(args) {
+  const options = {
+    expressionParts: [],
+    help: false,
+    json: false,
+    plain: false,
+    precision: null,
+    version: false
+  };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === '--') {
+      options.expressionParts.push(...args.slice(i + 1));
+      break;
+    }
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+    if (arg === '--version' || arg === '-v') {
+      options.version = true;
+      continue;
+    }
+    if (arg === '--plain') {
+      options.plain = true;
+      continue;
+    }
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
+    if (arg === '--precision') {
+      i += 1;
+      if (i >= args.length) failUsage('--precision requires a value');
+      options.precision = parsePrecision(args[i]);
+      continue;
+    }
+    if (arg.startsWith('--precision=')) {
+      options.precision = parsePrecision(arg.slice('--precision='.length));
+      continue;
+    }
+    if (arg.startsWith('-') && arg !== '-' && !/^-?(?:\d|\.\d)/.test(arg)) {
+      failUsage(`unknown option "${arg}"`);
+    }
+
+    options.expressionParts.push(arg);
+  }
+
+  return options;
+}
+
+function parsePrecision(value) {
+  if (!/^\d+$/.test(value)) failUsage('precision must be an integer between 1 and 15');
+  const precision = Number(value);
+  if (!Number.isInteger(precision) || precision < 1 || precision > 15) {
+    failUsage('precision must be an integer between 1 and 15');
+  }
+  return precision;
+}
+
+function failUsage(message) {
+  console.error(`Error: ${message}`);
+  console.error('Try "calccu --help" for usage.');
+  process.exit(2);
+}
 
 function clearScreen() {
   stdout.write('\x1b[2J\x1b[H');
@@ -45,7 +124,7 @@ function previewFor(text) {
 }
 
 function render() {
-  const preview = previewFor(input);
+  const columns = stdout.columns || 80;
   let row = 1;
   clearScreen();
   const scrolled = scrollOffset > 0 ? `, PageDown newer, ${scrollOffset} back` : '';
@@ -53,10 +132,11 @@ function render() {
   row += 2;
 
   for (const entry of visibleHistory()) {
-    stdout.write('> ' + entry.input + '\n');
-    row += 1;
+    const inputLines = wrapLines(['> ' + entry.input], columns);
+    for (const line of inputLines) stdout.write(line + '\n');
+    row += inputLines.length;
 
-    const formatted = formatOutput(entry.output);
+    const formatted = wrapLines(formatOutput(entry.output), columns);
     for (const line of formatted) stdout.write(line + '\n');
     row += formatted.length;
 
@@ -64,20 +144,18 @@ function render() {
     row += 1;
   }
 
-  stdout.write('> ' + input + '\n');
+  const prompt = promptView(input, cursor, columns);
   const promptRow = row;
+  stdout.write(prompt.line + '\n');
   row += 1;
 
-  if (preview) {
-    const formatted = formatOutput(preview);
-    stdout.write(formatted.join('\n') + '\n');
-  } else {
-    stdout.write('\n');
+  const preview = previewFor(input);
+  const maxPreviewRows = Math.max(0, Math.min(3, (stdout.rows || 30) - row + 1));
+  for (const line of previewLines(preview, columns, maxPreviewRows)) {
+    stdout.write(line + '\n');
   }
-  stdout.write('\n');
 
-  const column = 3 + cursor;
-  stdout.write(`\x1b[${promptRow};${column}H`);
+  stdout.write(`\x1b[${promptRow};${prompt.column}H`);
 }
 
 function commit() {
@@ -140,21 +218,11 @@ function rememberResult(text, output) {
 }
 
 function visibleHistory() {
-  if (history.length === 0) return [];
-  const rows = stdout.rows || 30;
-  const maxRows = Math.max(6, rows - 6);
-  let used = 0;
-  const visible = [];
-  const start = Math.max(0, history.length - 1 - scrollOffset);
-
-  for (let i = start; i >= 0; i -= 1) {
-    const entryRows = 2 + entryLineCount(history[i].output);
-    if (visible.length > 0 && used + entryRows > maxRows) break;
-    visible.unshift(history[i]);
-    used += entryRows;
-  }
-
-  return visible;
+  return visibleHistoryEntries(history, {
+    rows: stdout.rows || 30,
+    columns: stdout.columns || 80,
+    scrollOffset
+  });
 }
 
 function scrollOlder() {
@@ -164,10 +232,6 @@ function scrollOlder() {
 
 function scrollNewer() {
   scrollOffset = Math.max(0, scrollOffset - Math.max(1, visibleHistory().length));
-}
-
-function entryLineCount(output) {
-  return formatOutput(output).length;
 }
 
 function recallPrevious() {
@@ -201,6 +265,7 @@ function loadCommandHistory() {
 
 function saveCommandHistory() {
   try {
+    fs.mkdirSync(path.dirname(historyPath), { recursive: true });
     fs.writeFileSync(historyPath, commandHistory.join('\n') + (commandHistory.length ? '\n' : ''), 'utf8');
   } catch {
     // History is a convenience feature; calculator use should not fail if the file cannot be written.
@@ -222,9 +287,16 @@ function isLikelyIncomplete(error) {
 function shutdown() {
   if (!running) return;
   running = false;
-  clearScreen();
-  if (stdin.isTTY) stdin.setRawMode(false);
+  if (interactiveStarted) stdout.write('\n');
+  restoreTerminal();
   stdin.pause();
+}
+
+function restoreTerminal() {
+  if (rawModeEnabled && stdin.isTTY && typeof stdin.setRawMode === 'function') {
+    stdin.setRawMode(false);
+    rawModeEnabled = false;
+  }
 }
 
 function handleData(data) {
@@ -293,49 +365,109 @@ function handleKey(key) {
   }
 }
 
-process.on('exit', () => {
-  if (stdin.isTTY) stdin.setRawMode(false);
-});
-
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log(helpText());
-  process.exit(0);
-}
-
-if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  console.log(pkg.version);
-  process.exit(0);
-}
-
-if (process.argv.length > 2) {
-  const expression = process.argv.slice(2).join(' ');
+function evaluateExpression(expression) {
   try {
-    console.log(calc.execute(expression));
-    process.exit(0);
+    return { input: expression, ok: true, result: calc.execute(expression) };
   } catch (error) {
-    console.error('Error: ' + error.message);
-    process.exit(1);
+    return { input: expression, ok: false, error: error.message };
   }
 }
 
-if (!stdin.isTTY) {
+function printEvaluation(evaluation) {
+  if (cli.json) {
+    console.log(JSON.stringify(formatJsonEvaluation(evaluation)));
+    return;
+  }
+
+  if (evaluation.ok) {
+    console.log(cli.plain ? formatPlainResult(evaluation.result) : formatDisplayResult(evaluation.result));
+  } else {
+    console.error(cli.plain ? evaluation.error : 'Error: ' + evaluation.error);
+  }
+}
+
+function formatJsonEvaluation(evaluation) {
+  if (!evaluation.ok) {
+    return {
+      ok: false,
+      input: evaluation.input,
+      error: evaluation.error
+    };
+  }
+
+  return {
+    ok: true,
+    input: evaluation.input,
+    result: evaluation.result,
+    value: formatPlainResult(evaluation.result)
+  };
+}
+
+function formatPlainResult(result) {
+  return formatDisplayResult(result);
+}
+
+function evaluateAndPrint(expressions) {
+  let ok = true;
+  for (const expression of expressions) {
+    const evaluation = evaluateExpression(expression);
+    printEvaluation(evaluation);
+    if (!evaluation.ok) ok = false;
+  }
+  return ok;
+}
+
+function runStdinMode() {
   const chunks = [];
   stdin.setEncoding('utf8');
   stdin.on('data', (chunk) => chunks.push(chunk));
   stdin.on('end', () => {
     const expressions = chunks.join('').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    for (const expression of expressions) {
-      try {
-        console.log(calc.execute(expression));
-      } catch (error) {
-        console.error('Error: ' + error.message);
-        process.exitCode = 1;
-      }
-    }
+    process.exitCode = evaluateAndPrint(expressions) ? 0 : 1;
   });
-} else {
-  stdin.setRawMode(true);
+}
+
+function runInteractiveMode() {
+  interactiveStarted = true;
+  loadCommandHistory();
+  if (typeof stdin.setRawMode === 'function') {
+    stdin.setRawMode(true);
+    rawModeEnabled = true;
+  }
   stdin.resume();
   stdin.on('data', handleData);
+  stdin.on('error', shutdown);
+  stdout.on('error', shutdown);
+  stdout.on('resize', render);
   render();
+}
+
+process.on('exit', restoreTerminal);
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('uncaughtException', (error) => {
+  restoreTerminal();
+  console.error('Error: ' + error.message);
+  process.exit(1);
+});
+
+if (cli.help) {
+  console.log(helpText());
+  process.exit(0);
+}
+
+if (cli.version) {
+  console.log(pkg.version);
+  process.exit(0);
+}
+
+if (cli.expressionParts.length > 0) {
+  const expression = cli.expressionParts.join(' ');
+  process.exit(evaluateAndPrint([expression]) ? 0 : 1);
+}
+
+if (!stdin.isTTY) {
+  runStdinMode();
+} else {
+  runInteractiveMode();
 }

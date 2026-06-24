@@ -1,0 +1,5 @@
+complete -c calccu -s h -l help -d 'Show help'
+complete -c calccu -s v -l version -d 'Show version'
+complete -c calccu -l precision -d 'Set displayed significant digits' -x -a '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15'
+complete -c calccu -l plain -d 'Print only the answer value when possible'
+complete -c calccu -l json -d 'Print one JSON object per evaluated expression'

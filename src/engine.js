@@ -1,22 +1,31 @@
 'use strict';
 
 const BUILTINS = new Map([
-  ['abs', Math.abs],
-  ['acos', Math.acos],
-  ['asin', Math.asin],
-  ['atan', Math.atan],
-  ['ceil', Math.ceil],
-  ['cos', Math.cos],
-  ['exp', Math.exp],
-  ['floor', Math.floor],
-  ['ln', Math.log],
-  ['log', Math.log10],
-  ['max', Math.max],
-  ['min', Math.min],
-  ['round', Math.round],
-  ['sin', Math.sin],
-  ['sqrt', Math.sqrt],
-  ['tan', Math.tan]
+  ['abs', mathBuiltin(Math.abs)],
+  ['acos', mathBuiltin(Math.acos)],
+  ['asin', mathBuiltin(Math.asin)],
+  ['atan', mathBuiltin(Math.atan)],
+  ['cbrt', mathBuiltin(Math.cbrt)],
+  ['ceil', mathBuiltin(Math.ceil)],
+  ['cos', mathBuiltin(Math.cos)],
+  ['exp', mathBuiltin(Math.exp)],
+  ['fact', integerBuiltin(factorialValue, { arity: 1, max: 1000n })],
+  ['factorial', integerBuiltin(factorialValue, { arity: 1, max: 1000n })],
+  ['floor', mathBuiltin(Math.floor)],
+  ['gcd', integerBuiltin(gcdValues, { minArgs: 1 })],
+  ['hypot', mathBuiltin(Math.hypot)],
+  ['lcm', integerBuiltin(lcmValues, { minArgs: 1 })],
+  ['ln', mathBuiltin(Math.log)],
+  ['log', mathBuiltin(Math.log10)],
+  ['log2', mathBuiltin(Math.log2)],
+  ['max', mathBuiltin(Math.max)],
+  ['min', mathBuiltin(Math.min)],
+  ['round', mathBuiltin(Math.round)],
+  ['sign', mathBuiltin(Math.sign)],
+  ['sin', mathBuiltin(Math.sin)],
+  ['sqrt', mathBuiltin(Math.sqrt)],
+  ['tan', mathBuiltin(Math.tan)],
+  ['trunc', mathBuiltin(Math.trunc)]
 ]);
 
 const CONSTANTS = new Map([
@@ -96,6 +105,97 @@ const UNITS = new Map([
   ['TiB', { factor: 8796093022208, dimension: 'data', category: 'data' }]
 ]);
 
+const UNIT_ALIASES = new Map([
+  ['celsius', 'C'],
+  ['fahrenheit', 'F'],
+  ['kelvin', 'K'],
+  ['millimeter', 'mm'],
+  ['millimeters', 'mm'],
+  ['millimetre', 'mm'],
+  ['millimetres', 'mm'],
+  ['centimeter', 'cm'],
+  ['centimeters', 'cm'],
+  ['centimetre', 'cm'],
+  ['centimetres', 'cm'],
+  ['meter', 'm'],
+  ['meters', 'm'],
+  ['metre', 'm'],
+  ['metres', 'm'],
+  ['kilometer', 'km'],
+  ['kilometers', 'km'],
+  ['kilometre', 'km'],
+  ['kilometres', 'km'],
+  ['inch', 'in'],
+  ['inches', 'in'],
+  ['foot', 'ft'],
+  ['feet', 'ft'],
+  ['yard', 'yd'],
+  ['yards', 'yd'],
+  ['mile', 'mi'],
+  ['miles', 'mi'],
+  ['acre', 'acre'],
+  ['acres', 'acre'],
+  ['hectare', 'ha'],
+  ['hectares', 'ha'],
+  ['liter', 'L'],
+  ['liters', 'L'],
+  ['litre', 'L'],
+  ['litres', 'L'],
+  ['milliliter', 'mL'],
+  ['milliliters', 'mL'],
+  ['millilitre', 'mL'],
+  ['millilitres', 'mL'],
+  ['gallon', 'gal'],
+  ['gallons', 'gal'],
+  ['quart', 'qt'],
+  ['quarts', 'qt'],
+  ['pint', 'pt'],
+  ['pints', 'pt'],
+  ['cups', 'cup'],
+  ['gram', 'g'],
+  ['grams', 'g'],
+  ['kilogram', 'kg'],
+  ['kilograms', 'kg'],
+  ['tonne', 't'],
+  ['tonnes', 't'],
+  ['ounce', 'oz'],
+  ['ounces', 'oz'],
+  ['pound', 'lb'],
+  ['pounds', 'lb'],
+  ['stone', 'st'],
+  ['joule', 'J'],
+  ['joules', 'J'],
+  ['calorie', 'cal'],
+  ['calories', 'cal'],
+  ['second', 's'],
+  ['seconds', 's'],
+  ['sec', 's'],
+  ['secs', 's'],
+  ['minute', 'min'],
+  ['minutes', 'min'],
+  ['hour', 'h'],
+  ['hours', 'h'],
+  ['days', 'day'],
+  ['weeks', 'week'],
+  ['byte', 'B'],
+  ['bytes', 'B'],
+  ['bit', 'bit'],
+  ['bits', 'bit'],
+  ['kilobyte', 'KB'],
+  ['kilobytes', 'KB'],
+  ['megabyte', 'MB'],
+  ['megabytes', 'MB'],
+  ['gigabyte', 'GB'],
+  ['gigabytes', 'GB'],
+  ['terabyte', 'TB'],
+  ['terabytes', 'TB']
+]);
+
+const UNIT_SUGGESTION_NAMES = [
+  ...UNITS.keys(),
+  ...UNIT_ALIASES.keys()
+];
+
 class CalcError extends Error {}
 
 class UnitSymbol {
@@ -131,6 +231,7 @@ class Quantity {
       assertNotTemperatureCompound(this, other);
       return new Quantity(this.value * other.value, combineDimensions(this.dimensions, other.dimensions, 1), combineUnitNames(this.unit, other.unit, '*'));
     }
+    other = numberValue(other);
     assertNotTemperatureScale(this);
     return new Quantity(this.value * other, this.dimensions, this.unit);
   }
@@ -142,6 +243,7 @@ class Quantity {
       assertNotTemperatureCompound(this, other);
       return new Quantity(this.value / other.value, combineDimensions(this.dimensions, other.dimensions, -1), combineUnitNames(this.unit, other.unit, '/'));
     }
+    other = numberValue(other);
     if (other === 0) throw new CalcError('division by zero');
     assertNotTemperatureScale(this);
     return new Quantity(this.value / other, this.dimensions, this.unit);
@@ -150,6 +252,7 @@ class Quantity {
   pow(other) {
     if (other instanceof Quantity) throw new CalcError('unit exponents are not supported');
     if (other instanceof UnitSymbol) throw new CalcError('unit exponents are not supported');
+    other = numberValue(other);
     assertNotTemperatureScale(this);
     if (!Number.isInteger(other)) throw new CalcError('unit powers must be integers');
     const dimensions = {};
@@ -162,11 +265,11 @@ class Quantity {
   }
 
   convertTo(unitName) {
-    const unit = UNITS.get(unitName);
-    if (!unit) throw new CalcError(`unknown unit "${unitName}"`);
-    const target = quantityFromUnit(unitName, 1);
+    const canonicalName = resolveUnitName(unitName);
+    if (!canonicalName) throw new CalcError(unknownUnitMessage(unitName));
+    const target = quantityFromUnit(canonicalName, 1);
     this.assertSameDimensions(target);
-    return new Quantity(this.value, this.dimensions, unitName);
+    return new Quantity(this.value, this.dimensions, canonicalName);
   }
 
   assertSameDimensions(other) {
@@ -183,15 +286,17 @@ class Quantity {
 
 class Rational {
   constructor(n, d = 1) {
-    if (!Number.isInteger(n) || !Number.isInteger(d)) {
+    n = integerToBigInt(n);
+    d = integerToBigInt(d);
+    if (n === null || d === null) {
       throw new CalcError('exact solving only supports integer coefficients');
     }
-    if (d === 0) throw new CalcError('division by zero');
-    if (d < 0) {
+    if (d === 0n) throw new CalcError('division by zero');
+    if (d < 0n) {
       n = -n;
       d = -d;
     }
-    const g = gcd(Math.abs(n), Math.abs(d));
+    const g = gcd(absBigInt(n), absBigInt(d));
     this.n = n / g;
     this.d = d / g;
   }
@@ -213,7 +318,7 @@ class Rational {
 
   div(other) {
     other = asRational(other);
-    if (other.n === 0) throw new CalcError('division by zero');
+    if (other.n === 0n) throw new CalcError('division by zero');
     return new Rational(this.n * other.d, this.d * other.n);
   }
 
@@ -222,15 +327,15 @@ class Rational {
   }
 
   isZero() {
-    return this.n === 0;
+    return this.n === 0n;
   }
 
   toNumber() {
-    return this.n / this.d;
+    return Number(this.n) / Number(this.d);
   }
 
   toString() {
-    return this.d === 1 ? String(this.n) : `${this.n}/${this.d}`;
+    return this.d === 1n ? String(this.n) : `${this.n}/${this.d}`;
   }
 }
 
@@ -276,12 +381,12 @@ class Linear {
     if (!other.coef.isZero()) {
       throw new CalcError('variable exponents are not supported in equations');
     }
-    if (other.constant.d !== 1 || other.constant.n < 0) {
+    if (other.constant.d !== 1n || other.constant.n < 0n) {
       throw new CalcError('equation powers must be non-negative integers');
     }
-    if (other.constant.n === 0) return new Linear(new Rational(0), new Rational(1));
+    if (other.constant.n === 0n) return new Linear(new Rational(0), new Rational(1));
     let result = this;
-    for (let i = 1; i < other.constant.n; i += 1) {
+    for (let i = 1n; i < other.constant.n; i += 1n) {
       result = result.mul(this);
     }
     return result;
@@ -333,11 +438,11 @@ class Polynomial {
       throw new CalcError('variable exponents are not supported in equations');
     }
     const exponent = other.coeffs[0];
-    if (exponent.d !== 1 || exponent.n < 0) {
+    if (exponent.d !== 1n || exponent.n < 0n) {
       throw new CalcError('equation powers must be non-negative integers');
     }
     let result = new Polynomial([new Rational(1)]);
-    for (let i = 0; i < exponent.n; i += 1) {
+    for (let i = 0n; i < exponent.n; i += 1n) {
       result = result.mul(this);
     }
     return result;
@@ -387,7 +492,7 @@ class Tokenizer {
     }
     const raw = this.input.slice(start, this.index);
     if (dots > 1 || raw === '.') throw new CalcError(`invalid number "${raw}"`);
-    return { type: 'number', value: Number(raw), raw };
+    return { type: 'number', value: rationalFromDecimal(raw), raw };
   }
 
   readIdentifier() {
@@ -519,6 +624,8 @@ class Calculator {
         return `save ${parsed.name}(${parsed.params.join(', ')})`;
       case 'precision':
         return parsed.value ? `precision = ${parsed.value}` : `precision = ${this.precision}`;
+      case 'copy':
+        return `ans = ${this.formatValue(this.variables.get('ans'))}`;
       case 'delete':
         return `delete ${parsed.name}`;
       case 'vars':
@@ -554,7 +661,7 @@ class Calculator {
       }
       case 'assign': {
         if (parsed.name === 'ans') throw new CalcError('ans is managed automatically');
-        if (UNITS.has(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
+        if (resolveUnitName(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
         const value = this.evaluate(parsed.expr);
         this.variables.set(parsed.name, value);
         this.variables.set('ans', value);
@@ -562,7 +669,7 @@ class Calculator {
       }
       case 'fnAssign':
         if (BUILTINS.has(parsed.name)) throw new CalcError(`cannot replace built-in function "${parsed.name}"`);
-        if (UNITS.has(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
+        if (resolveUnitName(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
         this.functions.set(parsed.name, { params: parsed.params, body: parsed.body });
         return `${parsed.name}(${parsed.params.join(', ')}) saved`;
       case 'delete':
@@ -575,6 +682,8 @@ class Calculator {
         return this.formatUnits();
       case 'history':
         return 'history is available in interactive mode';
+      case 'copy':
+        return `ans = ${this.formatValue(this.variables.get('ans'))}`;
       case 'precision':
         if (parsed.value) this.precision = parsed.value;
         return `precision = ${this.precision}`;
@@ -590,9 +699,14 @@ class Calculator {
     if (lower === 'funcs' || lower === 'functions') return { kind: 'funcs' };
     if (lower === 'history') return { kind: 'history' };
     if (lower === 'units') return { kind: 'units' };
+    if (lower === 'copy' || lower === 'copy ans') return { kind: 'copy' };
 
-    const listMatch = /^(?:ls|list)\s+(vars?|variables|funcs?|functions)$/.exec(lower);
-    if (listMatch) return listMatch[1].startsWith('var') ? { kind: 'vars' } : { kind: 'funcs' };
+    const listMatch = /^(?:ls|list)\s+(vars?|variables|funcs?|functions|units?)$/.exec(lower);
+    if (listMatch) {
+      if (listMatch[1].startsWith('var')) return { kind: 'vars' };
+      if (listMatch[1].startsWith('func')) return { kind: 'funcs' };
+      return { kind: 'units' };
+    }
 
     const precisionMatch = /^(?:precision|prec)(?:\s+(\d+))?$/.exec(lower);
     if (precisionMatch) {
@@ -645,8 +759,8 @@ class Calculator {
         if (locals.has(expr.name)) return locals.get(expr.name);
         if (this.variables.has(expr.name)) return this.variables.get(expr.name);
         if (CONSTANTS.has(expr.name)) return CONSTANTS.get(expr.name);
-        if (UNITS.has(expr.name)) return unitQuantity(expr.name);
-        throw new CalcError(`unknown variable "${expr.name}"`);
+        if (resolveUnitName(expr.name)) return unitQuantity(expr.name);
+        throw new CalcError(unknownIdentifierMessage(expr.name));
       case 'unary':
         return negateValue(this.evaluate(expr.expr, locals));
       case 'binary':
@@ -660,7 +774,7 @@ class Calculator {
 
   evaluateCall(expr, locals) {
     const args = expr.args.map((arg) => this.evaluate(arg, locals));
-    if (BUILTINS.has(expr.name)) return BUILTINS.get(expr.name)(...args.map(numberValue));
+    if (BUILTINS.has(expr.name)) return BUILTINS.get(expr.name)(args, expr.name);
     const fn = this.functions.get(expr.name);
     if (!fn) throw new CalcError(`unknown function "${expr.name}"`);
     if (args.length !== fn.params.length) {
@@ -676,7 +790,9 @@ class Calculator {
     collectIdentifiers(left, names);
     collectIdentifiers(right, names);
     for (const known of [...this.variables.keys(), ...CONSTANTS.keys()]) names.delete(known);
-    for (const unit of UNITS.keys()) names.delete(unit);
+    for (const name of [...names]) {
+      if (resolveUnitName(name)) names.delete(name);
+    }
     if (names.size !== 1) {
       throw new CalcError('equations must contain exactly one unknown variable');
     }
@@ -717,7 +833,7 @@ class Calculator {
   toPolynomial(expr, unknown) {
     switch (expr.type) {
       case 'number':
-        return new Polynomial([rationalFromNumber(expr.value)]);
+        return new Polynomial([asRational(expr.value)]);
       case 'identifier':
         if (expr.name === unknown) return new Polynomial([new Rational(0), new Rational(1)]);
         return new Polynomial([rationalFromNumber(this.evaluate(expr))]);
@@ -746,7 +862,7 @@ class Calculator {
   toLinear(expr, unknown) {
     switch (expr.type) {
       case 'number':
-        return new Linear(new Rational(0), rationalFromNumber(expr.value));
+        return new Linear(new Rational(0), asRational(expr.value));
       case 'identifier':
         if (expr.name === unknown) return new Linear(new Rational(1), new Rational(0));
         return new Linear(new Rational(0), rationalFromNumber(this.evaluate(expr)));
@@ -775,8 +891,7 @@ class Calculator {
   extractSolvedValue(result) {
     const match = /^[A-Za-z_][A-Za-z0-9_]* = (-?\d+)(?:\/(\d+))?$/.exec(result);
     if (!match) return this.variables.get('ans');
-    const value = Number(match[1]) / Number(match[2] || 1);
-    return value;
+    return new Rational(BigInt(match[1]), BigInt(match[2] || '1'));
   }
 
   deleteName(name) {
@@ -855,6 +970,15 @@ function findTopLevelEquals(input) {
 }
 
 function parseConversion(input) {
+  const arrow = findTopLevelArrow(input);
+  if (arrow !== -1) {
+    const left = input.slice(0, arrow).trim();
+    const unit = input.slice(arrow + 2).trim();
+    if (!left || !unit) throw new CalcError('both sides of "->" are required');
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(unit)) throw new CalcError(`invalid unit "${unit}"`);
+    return { kind: 'convert', expr: new Parser(left).parse(), unit };
+  }
+
   let depth = 0;
   for (let i = input.length - 1; i >= 0; i -= 1) {
     const char = input[i];
@@ -868,6 +992,17 @@ function parseConversion(input) {
     }
   }
   return null;
+}
+
+function findTopLevelArrow(input) {
+  let depth = 0;
+  for (let i = 0; i < input.length - 1; i += 1) {
+    const char = input[i];
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === '-' && input[i + 1] === '>' && depth === 0) return i;
+  }
+  return -1;
 }
 
 function evalBinary(op, left, right) {
@@ -886,7 +1021,8 @@ function addValues(left, right) {
   if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.add(right);
   if (right instanceof Quantity) return asQuantity(left).add(right);
-  return left + right;
+  if (left instanceof Rational && right instanceof Rational) return left.add(right);
+  return numberValue(left) + numberValue(right);
 }
 
 function subValues(left, right) {
@@ -894,17 +1030,19 @@ function subValues(left, right) {
   if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.sub(right);
   if (right instanceof Quantity) return asQuantity(left).sub(right);
-  return left - right;
+  if (left instanceof Rational && right instanceof Rational) return left.sub(right);
+  return numberValue(left) - numberValue(right);
 }
 
 function mulValues(left, right) {
-  if (left instanceof UnitSymbol && typeof right === 'number') return quantityFromUnit(left.name, right);
-  if (right instanceof UnitSymbol && typeof left === 'number') return quantityFromUnit(right.name, left);
+  if (left instanceof UnitSymbol && isScalar(right)) return quantityFromUnit(left.name, numberValue(right));
+  if (right instanceof UnitSymbol && isScalar(left)) return quantityFromUnit(right.name, numberValue(left));
   if (left instanceof UnitSymbol) left = quantityFromUnit(left.name, 1);
   if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.mul(right);
   if (right instanceof Quantity) return right.mul(left);
-  return left * right;
+  if (left instanceof Rational && right instanceof Rational) return left.mul(right);
+  return numberValue(left) * numberValue(right);
 }
 
 function divValues(left, right) {
@@ -912,8 +1050,10 @@ function divValues(left, right) {
   if (right instanceof UnitSymbol) right = quantityFromUnit(right.name, 1);
   if (left instanceof Quantity) return left.div(right);
   if (right instanceof Quantity) return asQuantity(left).div(right);
+  if (left instanceof Rational && right instanceof Rational) return left.div(right);
+  right = numberValue(right);
   if (right === 0) throw new CalcError('division by zero');
-  return left / right;
+  return numberValue(left) / right;
 }
 
 function powValues(left, right) {
@@ -921,15 +1061,23 @@ function powValues(left, right) {
   if (right instanceof UnitSymbol) throw new CalcError('unit exponents are not supported');
   if (left instanceof Quantity) return left.pow(numberValue(right));
   if (right instanceof Quantity) throw new CalcError('unit exponents are not supported');
-  return left ** right;
+  if (left instanceof Rational && right instanceof Rational) {
+    const exact = rationalPow(left, right);
+    if (exact) return exact;
+  }
+  return numberValue(left) ** numberValue(right);
 }
 
 function negateValue(value) {
-  return value instanceof Quantity ? value.neg() : -value;
+  if (value instanceof Quantity) return value.neg();
+  if (value instanceof Rational) return value.neg();
+  return -value;
 }
 
 function numberValue(value) {
-  return value instanceof Quantity ? value.toNumber() : value;
+  if (value instanceof Quantity) return value.toNumber();
+  if (value instanceof Rational) return value.toNumber();
+  return value;
 }
 
 function collectIdentifiers(expr, names) {
@@ -951,6 +1099,7 @@ function containsIdentifier(expr, name) {
 }
 
 function rationalFromNumber(value) {
+  if (value instanceof Rational) return value;
   if (!Number.isFinite(value)) throw new CalcError('number is not finite');
   if (Number.isInteger(value)) return new Rational(value);
   const text = String(value);
@@ -960,8 +1109,19 @@ function rationalFromNumber(value) {
   const negative = text.startsWith('-');
   const unsigned = negative ? text.slice(1) : text;
   const [whole, fraction = ''] = unsigned.split('.');
-  const scale = 10 ** fraction.length;
-  const numerator = Number(whole) * scale + Number(fraction);
+  const scale = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(whole) * scale + BigInt(fraction || '0');
+  return new Rational(negative ? -numerator : numerator, scale);
+}
+
+function rationalFromDecimal(raw) {
+  const negative = raw.startsWith('-');
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [whole = '0', fraction = ''] = unsigned.split('.');
+  const scale = 10n ** BigInt(fraction.length);
+  const wholeValue = whole ? BigInt(whole) : 0n;
+  const fractionValue = fraction ? BigInt(fraction) : 0n;
+  const numerator = wholeValue * scale + fractionValue;
   return new Rational(negative ? -numerator : numerator, scale);
 }
 
@@ -971,23 +1131,154 @@ function asRational(value) {
 
 function asQuantity(value) {
   if (value instanceof UnitSymbol) return quantityFromUnit(value.name, 1);
-  return value instanceof Quantity ? value : new Quantity(value, {});
+  return value instanceof Quantity ? value : new Quantity(numberValue(value), {});
+}
+
+function isScalar(value) {
+  return typeof value === 'number' || value instanceof Rational;
+}
+
+function rationalPow(left, right) {
+  if (right.d !== 1n) return null;
+  const exponent = right.n;
+  if (exponent === 0n) return new Rational(1);
+  if (exponent > BigInt(Number.MAX_SAFE_INTEGER) || exponent < BigInt(-Number.MAX_SAFE_INTEGER)) return null;
+
+  const power = Number(absBigInt(exponent));
+  const numerator = left.n ** BigInt(power);
+  const denominator = left.d ** BigInt(power);
+  const result = new Rational(numerator, denominator);
+  return exponent > 0n ? result : new Rational(result.d, result.n);
+}
+
+function mathBuiltin(fn) {
+  return (args) => fn(...args.map(numberValue));
+}
+
+function integerBuiltin(fn, options = {}) {
+  return (args, name) => {
+    const minArgs = options.minArgs || options.arity || 0;
+    if (args.length < minArgs) throw new CalcError(`${name} expects at least ${minArgs} argument(s)`);
+    if (options.arity !== undefined && args.length !== options.arity) {
+      throw new CalcError(`${name} expects ${options.arity} argument(s)`);
+    }
+
+    const values = args.map((arg) => integerArgument(arg, name));
+    if (options.max !== undefined && values.some((value) => value > options.max)) {
+      throw new CalcError(`${name} input is too large`);
+    }
+    return new Rational(fn(values));
+  };
+}
+
+function integerArgument(value, name) {
+  if (value instanceof Quantity) value = value.toNumber();
+  if (value instanceof UnitSymbol) value = quantityFromUnit(value.name, 1).toNumber();
+  if (value instanceof Rational) {
+    if (value.d !== 1n) throw new CalcError(`${name} expects integer arguments`);
+    return value.n;
+  }
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    throw new CalcError(`${name} expects integer arguments`);
+  }
+  if (!Number.isSafeInteger(value)) {
+    throw new CalcError(`${name} expects safe integer arguments`);
+  }
+  return BigInt(value);
+}
+
+function gcdValues(values) {
+  return values.reduce((result, value) => exactGcd(result, value), 0n);
+}
+
+function lcmValues(values) {
+  return values.reduce((result, value) => {
+    const left = absBigInt(result);
+    const right = absBigInt(value);
+    if (left === 0n || right === 0n) return 0n;
+    return (left / exactGcd(left, right)) * right;
+  }, 1n);
+}
+
+function factorialValue(values) {
+  const value = values[0];
+  if (value < 0n) throw new CalcError('factorial expects a non-negative integer');
+  let result = 1n;
+  for (let i = 2n; i <= value; i += 1n) result *= i;
+  return result;
 }
 
 function unitQuantity(name) {
-  return new UnitSymbol(name);
+  return new UnitSymbol(resolveUnitName(name));
 }
 
 function quantityFromUnit(name, amount) {
-  const unit = UNITS.get(name);
+  const canonicalName = resolveUnitName(name);
+  if (!canonicalName) throw new CalcError(unknownUnitMessage(name));
+  const unit = UNITS.get(canonicalName);
   const value = unit.toBase ? unit.toBase(amount) : amount * unit.factor;
-  return new Quantity(value, { [unit.dimension]: 1 }, name);
+  return new Quantity(value, { [unit.dimension]: 1 }, canonicalName);
 }
 
 function unitBaseAmount(value, unitName) {
+  unitName = resolveUnitName(unitName);
   const unit = UNITS.get(unitName);
   if (!unit) return value;
   return unit.fromBase ? unit.fromBase(value) : value / unit.factor;
+}
+
+function resolveUnitName(name) {
+  if (UNITS.has(name)) return name;
+  return UNIT_ALIASES.get(name.toLowerCase()) || null;
+}
+
+function unknownIdentifierMessage(name) {
+  const suggestion = suggestUnitName(name);
+  if (suggestion) return `unknown variable "${name}"; did you mean unit "${suggestion}"?`;
+  return `unknown variable "${name}"`;
+}
+
+function unknownUnitMessage(name) {
+  const suggestion = suggestUnitName(name);
+  if (suggestion) return `unknown unit "${name}"; did you mean "${suggestion}"?`;
+  return `unknown unit "${name}"`;
+}
+
+function suggestUnitName(name) {
+  const lower = name.toLowerCase();
+  let best = null;
+  let bestDistance = Infinity;
+
+  for (const candidate of UNIT_SUGGESTION_NAMES) {
+    const distance = levenshtein(lower, candidate.toLowerCase());
+    if (distance < bestDistance || (distance === bestDistance && candidate.length < best.length)) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+
+  const limit = lower.length <= 4 ? 1 : 2;
+  return bestDistance <= limit ? best : null;
+}
+
+function levenshtein(left, right) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array(right.length + 1);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
+      );
+    }
+    for (let j = 0; j <= right.length; j += 1) previous[j] = current[j];
+  }
+
+  return previous[right.length];
 }
 
 function isTemperatureQuantity(value) {
@@ -1046,16 +1337,29 @@ function combineUnitNames(left, right, op) {
 }
 
 function gcd(a, b) {
-  while (b !== 0) {
+  a = absBigInt(a);
+  b = absBigInt(b);
+  while (b !== 0n) {
     const t = b;
     b = a % b;
     a = t;
   }
-  return a || 1;
+  return a || 1n;
+}
+
+function exactGcd(a, b) {
+  a = absBigInt(a);
+  b = absBigInt(b);
+  while (b !== 0n) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
 }
 
 function sqrtRational(value) {
-  if (value.n < 0) return null;
+  if (value.n < 0n) return null;
   const n = integerSqrt(value.n);
   const d = integerSqrt(value.d);
   if (n * n === value.n && d * d === value.d) return new Rational(n, d);
@@ -1063,7 +1367,32 @@ function sqrtRational(value) {
 }
 
 function integerSqrt(value) {
-  return Math.floor(Math.sqrt(value));
+  if (value < 0n) throw new CalcError('cannot take square root of a negative integer');
+  if (value < 2n) return value;
+  let low = 1n;
+  let high = value;
+  while (low <= high) {
+    const mid = (low + high) / 2n;
+    const square = mid * mid;
+    if (square === value) return mid;
+    if (square < value) {
+      low = mid + 1n;
+    } else {
+      high = mid - 1n;
+    }
+  }
+  return high;
+}
+
+function integerToBigInt(value) {
+  if (typeof value === 'bigint') return value;
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null;
+  if (!Number.isSafeInteger(value)) return null;
+  return BigInt(value);
+}
+
+function absBigInt(value) {
+  return value < 0n ? -value : value;
 }
 
 function formatTable(rows) {
@@ -1092,6 +1421,10 @@ function formatDimensions(dimensions) {
 }
 
 function formatNumber(value, precision = 12) {
+  if (value instanceof Rational) {
+    if (value.d === 1n) return value.n.toString();
+    return formatNumber(value.toNumber(), precision);
+  }
   if (!Number.isFinite(value)) return String(value);
   if (Math.abs(value) < 1e-12) return '0';
   return Number(value.toPrecision(precision)).toString();

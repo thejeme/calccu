@@ -1,6 +1,6 @@
 {
   "name": "calccu",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A live terminal calculator with variables, functions, units, ans, and equation solving.",
   "bin": {
     "calccu": "bin/calccu.js"
@@ -19,6 +19,9 @@
   "files": [
     "bin",
     "src",
+    "completions",
+    "man",
+    "LICENSE",
     "README.md"
   ],
   "repository": {
