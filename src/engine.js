@@ -610,6 +610,7 @@ class Calculator {
   }
 
   preview(input) {
+    this.assertPreviewAssignmentTarget(input);
     const parsed = this.parseStatement(input);
     switch (parsed.kind) {
       case 'expr':
@@ -619,8 +620,10 @@ class Calculator {
       case 'equation':
         return this.solve(parsed.left, parsed.right);
       case 'assign':
+        this.assertVariableAssignmentName(parsed.name);
         return `${parsed.name} = ${this.formatValue(this.evaluate(parsed.expr))}`;
       case 'fnAssign':
+        this.assertFunctionAssignmentName(parsed.name);
         return `save ${parsed.name}(${parsed.params.join(', ')})`;
       case 'precision':
         return parsed.value ? `precision = ${parsed.value}` : `precision = ${this.precision}`;
@@ -660,16 +663,14 @@ class Calculator {
         return result;
       }
       case 'assign': {
-        if (parsed.name === 'ans') throw new CalcError('ans is managed automatically');
-        if (resolveUnitName(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
+        this.assertVariableAssignmentName(parsed.name);
         const value = this.evaluate(parsed.expr);
         this.variables.set(parsed.name, value);
         this.variables.set('ans', value);
         return `${parsed.name} = ${this.formatValue(value)}`;
       }
       case 'fnAssign':
-        if (BUILTINS.has(parsed.name)) throw new CalcError(`cannot replace built-in function "${parsed.name}"`);
-        if (resolveUnitName(parsed.name)) throw new CalcError(`"${parsed.name}" is a unit name`);
+        this.assertFunctionAssignmentName(parsed.name);
         this.functions.set(parsed.name, { params: parsed.params, body: parsed.body });
         return `${parsed.name}(${parsed.params.join(', ')}) saved`;
       case 'delete':
@@ -749,6 +750,35 @@ class Calculator {
     }
 
     return { kind: 'expr', expr: new Parser(trimmed).parse() };
+  }
+
+  assertPreviewAssignmentTarget(input) {
+    const trimmed = input.trim();
+    const topEquals = findTopLevelEquals(trimmed);
+    if (topEquals === -1) return;
+
+    const left = trimmed.slice(0, topEquals).trim();
+    if (!left) return;
+
+    const fnMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)$/.exec(left);
+    if (fnMatch) {
+      this.assertFunctionAssignmentName(fnMatch[1]);
+      return;
+    }
+
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(left)) {
+      this.assertVariableAssignmentName(left);
+    }
+  }
+
+  assertVariableAssignmentName(name) {
+    if (name === 'ans') throw new CalcError('ans is managed automatically');
+    if (resolveUnitName(name)) throw new CalcError(`"${name}" is a unit name`);
+  }
+
+  assertFunctionAssignmentName(name) {
+    if (BUILTINS.has(name)) throw new CalcError(`cannot replace built-in function "${name}"`);
+    if (resolveUnitName(name)) throw new CalcError(`"${name}" is a unit name`);
   }
 
   evaluate(expr, locals = new Map()) {

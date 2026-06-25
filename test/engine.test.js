@@ -151,7 +151,7 @@ test('deletes variables and functions', () => {
 
 test('previews function definitions without evaluating the body', () => {
   const calc = new Calculator();
-  assert.equal(calc.preview('g(x) = x + later'), 'save g(x)');
+  assert.equal(calc.preview('square(x) = x + later'), 'save square(x)');
   assert.equal(calc.preview('2 + 2'), '4');
   assert.equal(calc.preview('5km to m'), '5000 m');
   assert.equal(calc.preview('2x = 3'), 'x = 3/2');
@@ -159,6 +159,15 @@ test('previews function definitions without evaluating the body', () => {
   assert.equal(calc.preview('vars'), 'Name  Value\nans   0');
   assert.equal(calc.preview('copy'), 'ans = 0');
   assert.equal(calc.preview('history'), 'history is available in interactive mode');
+});
+
+test('previews reserved assignment errors before commit', () => {
+  const calc = new Calculator();
+  assert.throws(() => calc.preview('m ='), /"m" is a unit name/);
+  assert.throws(() => calc.preview('m = 2'), /"m" is a unit name/);
+  assert.throws(() => calc.preview('ans = 2'), /ans is managed automatically/);
+  assert.throws(() => calc.preview('sin(x) = x'), /cannot replace built-in function "sin"/);
+  assert.throws(() => calc.preview('kg(x) = x'), /"kg" is a unit name/);
 });
 
 test('copies the current answer as displayable output', () => {
