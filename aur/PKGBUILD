@@ -1,13 +1,14 @@
 pkgname=calccu
 pkgver=0.2.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Terminal calculator with variables, functions, units, and equation solving'
 arch=('any')
 url='https://github.com/thejeme/calccu'
 license=('MIT')
 depends=('nodejs>=18')
 makedepends=('git')
-source=("${pkgname}-${pkgver}::git+${url}.git#tag=v${pkgver}")
+_commit='fac5bc5cd852e1f9e1efac3da179634ee9ddd9a7'
+source=("${pkgname}-${pkgver}::git+${url}.git#commit=${_commit}")
 sha256sums=('SKIP')
 
 check() {
